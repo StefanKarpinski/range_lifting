@@ -1,24 +1,34 @@
-function simplest_between(x::Rational{T}, y::Rational{T}) where {T<:Integer}
-    x, y = minmax(x, y)
-    y < 0 && return -simplest_between(-y, -x)
-    x ≤ 0 && return zero(Rational{T})
+# based on https://stackoverflow.com/a/65189151/659248
 
-    s = numerator(x)
-    t = denominator(x)
-    u = numerator(y)
-    v = denominator(y)
+function simplest_between(s::R, t::R, u::R, v::R) where {R<:Real}
+    if u*t < s*v
+        s, u = u, s
+        t, v = v, t
+    end
+    if u*v < 0
+        n, d = simplest_between(-u, v, -s, t)
+        return -n, d
+    end
+    if s*t ≤ 0
+        return zero(R), one(R)
+    end
 
-    a = one(T)
-    b = zero(T)
-    c = zero(T)
-    d = one(T)
-    
+    a = d = one(R)
+    b = c = zero(R)
+
     while true
-        q = (s - one(T)) ÷ t
+        q = (s - one(R)) ÷ t
         s, t, u, v = v, u-q*v, t, s-q*t
         a, b, c, d = b+q*a, a, d+q*c, c
-        s ≤ t && return (a + b)//(c + d)
+        s ≤ t && return a+b, c+d
     end
+end
+
+function simplest_between(x::Rational, y::Rational)
+    Rational(simplest_between(
+        numerator(x), denominator(x),
+        numerator(y), denominator(y),
+    )...)
 end
 
 function lift_range(a::Float64, s::Float64, b::Float64)
@@ -45,9 +55,13 @@ function lift_range(a::Float64, s::Float64, b::Float64)
     r = simplest_between(r⁻, r⁺)
     x = r + q
     y = x/(x-n)
-    a⁻ = max((A - eᴬ)//1, (B - eᴮ)*y)//big(2)^(-p+1)
-    a⁺ = min((A + eᴬ)//1, (B + eᴮ)*y)//big(2)^(-p+1)
-    â = simplest_between(a⁻, a⁺)
+    A⁻ = max((A - eᴬ)//1, (B - eᴮ)*y)
+    A⁺ = min((A + eᴬ)//1, (B + eᴮ)*y)
+    â_n, â_d = simplest_between(
+        numerator(A⁻)*1.0, denominator(A⁻)*exp2(-p+1),
+        numerator(A⁺)*1.0, denominator(A⁺)*exp2(-p+1),
+    )
+    â = Int(â_n)//Int(â_d)
     b̂ = â/y
     ŝ = (b̂-â)/n
     return â, ŝ, b̂
