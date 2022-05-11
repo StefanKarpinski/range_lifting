@@ -26,11 +26,13 @@ end
 end
 
 @eval Base function round(
-    x::TwicePrecision,
+    x::TwicePrecision{<:AbstractFloat},
     r::RoundingMode{mode} = RoundNearest,
 ) where {mode}
     if eps(x.hi) ≥ 1
-        return TwicePrecision(x.hi, round(x.lo, r))
+        flip = mode in (:ToZero, :FromZero) && x.hi*x.lo < 0
+        r_lo = flip ? -round(-x.lo) : round(x.lo)
+        return TwicePrecision(x.hi, r_lo)
     else
         next = nextfloat(x.hi, Int(sign(x.lo)))
         this = round(x.hi, r)
