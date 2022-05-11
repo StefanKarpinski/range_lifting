@@ -2,6 +2,11 @@
 
 using Base: TwicePrecision
 
+function ratio(x::TwicePrecision{<:AbstractFloat})
+    d = inv(iszero(x.lo) ? eps(x.hi) : eps(x.lo))
+    return x*d, TwicePrecision(d)
+end
+
 function simplest_between(x::T, y::T) where {T<:TwicePrecision}
     𝟘, 𝟙 = zero(T), one(T)
     if y < 𝟘
@@ -10,14 +15,17 @@ function simplest_between(x::T, y::T) where {T<:TwicePrecision}
     end
     x ≤ 𝟘 && return 𝟘, 𝟙
 
+    s, t = ratio(x)
+    u, v = ratio(y)
+
     a = d = 𝟙
     b = c = 𝟘
 
     while true
-        q = round(x, RoundToZero)
-        x, y = inv(y - q), inv(x - q)
-        a, b, c, d = b + q*a, a, d + q*c, c
-        x ≤ 𝟙 && return a + b, c + d
+        q = (s - 𝟙) ÷ t
+        s, t, u, v = v, u-q*v, t, s-q*t
+        a, b, c, d = b+q*a, a, d+q*c, c
+        s ≤ t && return a + b, c + d
     end
 end
 
