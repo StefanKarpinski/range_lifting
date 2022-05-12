@@ -61,19 +61,35 @@ end
 end
 
 @eval Base inv(x::TwicePrecision) = one(typeof(x))/x
+@eval Base abs(x::TwicePrecision) = signbit(x.hi) ? -x : x
 @eval Base isless(x::TwicePrecision, y::TwicePrecision) = x < y
+
+function goodness(x::TwicePrecision{F}) where {F<:Base.IEEEFloat}
+    # n == x (mod Int)
+    n = Signed(x.hi/eps(x.hi)) << exponent(eps(x.hi)) +
+        Signed(x.lo/eps(x.lo)) << exponent(eps(x.lo))
+    # return trailing zeros = high for powers of two
+    # also high for powers of ten since since 2 | 10
+    # (and: powers of 2 and 10 can't be too nearby)
+    return trailing_zeros(n)
+end
 
 mid(a::Float64, b::Float64) = TwicePrecision(0.5a) + TwicePrecision(0.5b)
 
 function lift_range(a::Float64, s::Float64, b::Float64)
-    # carefully compute (a+b)/2, (a-b)/2, n, n/2
+    # carefully compute (a+b)/2, (a-b)/2, n
     m = mid(a, -b)
     r = mid(a, +b)/m
-    n = round(-m/0.5s) # TODO: bail if n is infinite
+    n = round(-m/0.5s)
+    # TODO: bail if n is infinite
+    # TODO: search for  n values are possible
 
-    # bounds for `a`, `b` and `r = (a + b)/(a - b)`
+    # initial bounds for a, s, b
     a⁻, a⁺ = mid(prevfloat(a), a), mid(a, nextfloat(a))
+    s⁻, s⁺ = mid(prevfloat(s), s), mid(s, nextfloat(s))
     b⁻, b⁺ = mid(prevfloat(b), b), mid(b, nextfloat(b))
+
+    # bounds for r = (a + b)/(a - b)
     r⁻ = r⁺ = r
     for a′ in (a⁻, a⁺), b′ in (b⁻, b⁺)
         r′ = (a′ + b′)/(a′ - b′)
@@ -81,30 +97,44 @@ function lift_range(a::Float64, s::Float64, b::Float64)
         r⁺ = max(r⁺, r′)
     end
 
-    # want simple `F` such that `a + (q + F)*s == 0`
-    # where `q ∈ ℤ` and `-1/2 ≤ F ≤ 1/2`
-    n½ = 0.5n
-    q = round(n½*(1 + r))
-    F⁻ = n½*(1 + r⁻) - q
-    F⁺ = n½*(1 + r⁺) - q
-    # F = f/d, X = x/d, Y = y/d
-    f, d = simplest_between(F⁻, F⁺)
-    x = f + q*d # X = F + q = (f + q*d)/d
-    y = x - n*d # Y = X - n = (x - n*d)/d
+    # want simple f such that a - (q + f)*s == 0
+    #   where q ∈ ℤ and |f| ≤ 1/2
+    h = -0.5n
+    q = round(h*(1 + r))
+    f⁻ = h*(1 + r⁺) - q
+    f⁺ = h*(1 + r⁻) - q
+    # define x = a/s, y = b/s
+    # f = F/d, x = X/d, y = Y/d
+    F, d = simplest_between(f⁻, f⁺)
+    X = F + q*d # x = f + q = (F + q*d)/d
+    Y = X + n*d # y = x + n = (X + n*d)/d
 
-    # use `x/y` for better bounds on `a`
-    a⁻′, a⁺′ = minmax(b⁻*x/y, b⁺*x/y)
-    a⁻ = max(a⁻, a⁻′)
-    a⁺ = min(a⁺, a⁺′)
+    # tighten bounds on `s`
+    # s = a/x = a/(X/d) = a*d/X
+    s⁻′, s⁺′ = minmax(a⁻*d/X, a⁺*d/X)
+    s⁻ = max(s⁻, s⁻′)
+    s⁺ = min(s⁺, s⁺′)
+    # s = b/y = b/(Y/d) = b*d/Y
+    s⁻′, s⁺′ = minmax(b⁻*d/Y, b⁺*d/Y)
+    s⁻ = max(s⁻, s⁻′)
+    s⁺ = min(s⁺, s⁺′)
 
-    # simplest rational for `a`
-    A, D = simplest_between(a⁻, a⁺)
-    Dx = D*x
+    # simplest rational for `s`
+    S, D⁻ = simplest_between(s⁻, s⁺)
 
-    # and finally get our lifted values
-    â = A/D
-    b̂ = (A*y)/Dx
-    ŝ = A*(y - x)/(Dx*n)
+    # pick the best viable D value
+    ŝ = S/D⁻
+    D = D′ = D⁻
+    g = goodness(D)
+    while s⁻ ≤ (s′ = S/(D′ += 1)) ≤ s⁺
+        # test for "goodness" of D here
+        g′ = goodness(D′)
+        g′ > g || continue
+        ŝ, D, g = s′, D′, g′
+    end
 
-    return â, ŝ, b̂
+    # compute the offset constant
+    c = (F*S)/(D*d)
+
+    return [c + (k + q)*ŝ for k = 0:Int(n)]
 end
