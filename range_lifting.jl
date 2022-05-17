@@ -7,49 +7,76 @@ function ratio(x::TwicePrecision{<:AbstractFloat})
     return x*d, TwicePrecision(d)
 end
 
-# powers of two an integer-valued TwicePrecision is divisible by (max 64)
-function tz(x::TwicePrecision{F}) where {F<:Base.IEEEFloat}
-    # n == x (mod Int)
-    n = Signed(x.hi/eps(x.hi)) << exponent(eps(x.hi)) +
-        Signed(x.lo/eps(x.lo)) << exponent(eps(x.lo))
-    return trailing_zeros(n)
+# exact 2^(8*sizeof(F)) modulus of an integer-valued TwicePrecision
+function Base.:%(x::TwicePrecision{F}, Signed) where {F<:Base.IEEEFloat}
+    Signed(x.hi/eps(x.hi)) << exponent(eps(x.hi)) +
+    Signed(x.lo/eps(x.lo)) << exponent(eps(x.lo))
 end
 
-function simplest_rational(x::T, y::T) where {T<:TwicePrecision}
-    𝟘, 𝟙 = zero(T), one(T)
+# how many powers of two divide an integer-valued TwicePrecision
+tz(x::TwicePrecision) = trailing_zeros(x % Signed)
+
+# more accurate ring operations on integer-valued TwicePrecision
+function int_op(op::Function, x::TwicePrecision, y::TwicePrecision)
+    z = op(x, y)
+    z += op(x % Signed, y % Signed) - (z % Signed)
+end
+
++̇(x::TwicePrecision, y::TwicePrecision) = int_op(+, x, y)
+-̇(x::TwicePrecision, y::TwicePrecision) = int_op(-, x, y)
+*̇(x::TwicePrecision, y::TwicePrecision) = int_op(*, x, y)
+
+function simplest_rational(V::Interval{F})
+    𝟘, 𝟙 = zero(V.lo), one(V.lo)
     if y < 𝟘
-        N, D = simplest_rational(-y, -x)
+        N, D = simplest_rational(-V)
         return -N, D
     end
-    x ≤ 𝟘 && return 𝟘, 𝟙
+    N = pick_int(V)
+    !isnan(N) && return N, 𝟙
+    Λ = inv(V)
+    D = pick_int(Λ)
+    !isnan(D) && return 𝟙, D
 
-    s, t = ratio(x)
-    u, v = ratio(y)
+    N₁, D₁ = simplest_rational_core(V)
+    D₂, N₂ = simplest_rational_core(Λ)
+
+    if D₂ < 𝟘
+        N₂ = -N₂
+        D₂ = abs(D₂)
+    end
+
+    g₁ = tz(N₁) + tz(D₁)
+    g₂ = tz(N₂) + tz(D₂)
+
+    g₁ > g₂ && return N₁, D₁
+    g₁ < g₂ && return N₂, D₂
+
+    g₁ = abs(N₁) + D₁
+    g₂ = abs(N₂) + D₂
+
+    g₁ ≥ g₂ ? (N₁, D₁) : (N₂, D₂)
+end
+
+function simplest_rational_core(V::Interval{F})
+    𝟘, 𝟙 = zero(V.lo), one(V.lo)
+
+    s, t = ratio(V.lo)
+    u, v = ratio(V.hi)
 
     a = d = 𝟙
     b = c = 𝟘
 
     while true
-        q = (s - 𝟙) ÷ t
+        q = s ÷ t
         s, t, u, v = v, u-q*v, t, s-q*t
         a, b, c, d = b+q*a, a, d+q*c, c
-        s ≤ t && break
+        s < t && break
     end
+
     N, D = a + b, c + d
-
-    # N has smallest possible absolute value
-    # there can be multiple possible D values
-    # we have the smallest one (always positive)
-    # scan for potentially "simpler" denominators
-    # our heuristic is having more factors of two
-
-    D′ = D
-    z = N/D′
-    g = tz(D′)
-    while x ≤ (z′ = N/(D′ += 1))
-        (g′ = tz(D′)) > g || continue
-        g, z, D = g′, z′, D′
-    end
+    N = pick_int(D*V)
+    D = pick_int(N/V)
 
     return N, D
 end
@@ -60,7 +87,7 @@ Base.one(T::Type{<:TwicePrecision}) = T(1, 0)
 
 Base.copy(x::TwicePrecision) = x
 
-@eval Base function round(
+function Base.round(
     x::TwicePrecision{<:AbstractFloat},
     r::RoundingMode{mode} = RoundNearest,
 ) where {mode}
@@ -79,7 +106,7 @@ Base.copy(x::TwicePrecision) = x
     end
 end
 
-@eval Base function div(
+function Base.div(
     a::TwicePrecision{T},
     b::TwicePrecision{T},
     r::RoundingMode,
@@ -87,10 +114,11 @@ end
     round(a/b, r)
 end
 
-@eval Base inv(x::TwicePrecision) = one(typeof(x))/x
-@eval Base abs(x::TwicePrecision) = signbit(x.hi) ? -x : x
-@eval Base isless(x::TwicePrecision, y::TwicePrecision) = x < y
-@eval Base bitstring(n::BigInt) = string(n, base=2)
+Base.inv(x::TwicePrecision) = one(typeof(x))/x
+Base.abs(x::TwicePrecision) = signbit(x.hi) ? -x : x
+Base.isnan(x::TwicePrecision) = isnan(x.hi) | isnan(x.lo)
+Base.isless(x::TwicePrecision, y::TwicePrecision) = x < y
+Base.bitstring(n::BigInt) = string(n, base=2)
 
 int(x::TwicePrecision) = BigInt(x.hi) + BigInt(x.lo)
 
@@ -106,15 +134,19 @@ Interval(x::AbstractFloat) = Interval(mid(prevfloat(x), x), mid(x, nextfloat(x))
 @inline lo_hi(op::Function, U::Interval, V::Interval) =
     extrema((op(U.lo, V.lo), op(U.lo, V.hi), op(U.hi, V.lo), op(U.hi, V.hi)))
 
+Base.:-(U::Interval) = Interval(-U.hi, -U.lo)
 Base.:+(U::Interval, V::Interval) = Interval(U.lo + V.lo, U.hi + V.hi)
 Base.:-(U::Interval, V::Interval) = Interval(U.lo - V.hi, U.hi - V.lo)
 Base.:*(U::Interval, V::Interval) = Interval(lo_hi(*, U, V)...)
 Base.:/(U::Interval, V::Interval) = Interval(lo_hi(/, U, V)...)
-Base.:∩(U::Interval, V::Interval) = Interval(max(U.lo, V.lo), min(U.hi, V.hi))
+Base.:&(U::Interval, V::Interval) = Interval(max(U.lo, V.lo), min(U.hi, V.hi))
 
 Base.:+(x::Real, V::Interval) = typeof(V)(x + V.lo, x + V.hi)
 Base.:*(x::Real, V::Interval) = typeof(V)(minmax(x*V.lo, x*V.hi)...)
 Base.:*(x::TwicePrecision, V::Interval) = Interval(minmax(x*V.lo, x*V.hi)...)
+Base.:/(V::Interval, x::TwicePrecision) = Interval(minmax(V.lo/x, V.hi/x)...)
+
+Base.inv(U::Interval) = Interval(minmax(inv(U.lo), inv(U.hi))...)
 
 simplest_rational(V::Interval) = simplest_rational(V.lo, V.hi)
 
@@ -132,7 +164,7 @@ function pick_int(V::Interval{F}) where {F<:AbstractFloat}
     @assert 𝟘 < lo < hi
 
     # find range of at most 10 good candidates
-    l = ilog10(hi - lo)
+    l = ilog10(hi -̇ lo)
     m = Int(floor(log(5, maxintfloat(F))))
     q, r = divrem(l, m)
     p = Base.power_by_squaring(TwicePrecision(F(10)^m), q)
@@ -140,7 +172,7 @@ function pick_int(V::Interval{F}) where {F<:AbstractFloat}
     n = round(lo/p, RoundUp)
     h = round(hi/p, RoundDown)
 
-    # pick the one with the most factors of 2
+    # pick the one with the most factors of two
     n′ = n
     g = tz(n′)
     while (n′ += 1) ≤ h
@@ -155,10 +187,31 @@ function pick_int(V::Interval{F}) where {F<:AbstractFloat}
 end
 
 function lift_range(a::Float64, s::Float64, b::Float64)
-    # bounds on real input values
     A = Interval(a)
     S = Interval(s)
     B = Interval(b)
+
+    X = A/S
+    Y = B/S
+    x = pick_int(X)
+    y = pick_int(Y)
+
+    # TODO: handle case where S is integral
+
+    if !isnan(x) && !isnan(y) # x & y are integers
+        # tighten bounds on S, A, B
+        S &= A/x
+        S &= B/y
+        N, D = simplest_rational(S)
+        q = x # already an integer
+        z = zero(q)
+        ŝ = N/D
+    else # x & y are non-integers
+        N = (B - A)/S
+        n = pick_int(N)
+        isnan(n) && error("infeasible range")
+        
+    end
 
     n = pick_int((B - A)/S)
     R = (A + B)/(A - B)
@@ -193,5 +246,6 @@ function lift_range(a::Float64, s::Float64, b::Float64)
     z = (F*S)/(D*d)
     ŝ = S/D
 
-    [z + (k + q)*ŝ for k = 0:Int(n)]
+    rg(k) = z + (k +̇ q)*ŝ
+    [rg(k) for k = 0:Int(n)]
 end
