@@ -10,6 +10,8 @@ struct Interval{F<:AbstractFloat} <: Number
 end
 Interval(x::AbstractFloat) = Interval(mid(prevfloat(x), x), mid(x, nextfloat(x)))
 
+Base.in(r::Union{Real,TwicePrecision}, V::Interval) = V.lo ≤ r ≤ V.hi
+
 mid(a::Float64, b::Float64) = TwicePrecision(0.5a) + TwicePrecision(0.5b)
 mid(V::Interval) = 0.5V.lo + 0.5V.hi
 
@@ -81,14 +83,14 @@ function ratio(x::TwicePrecision{<:AbstractFloat})
     return x*d, TwicePrecision(d)
 end
 
-# exact modulus of an integer-valued TwicePrecision
+# exact modulus of an integer-valued TwicePrecision 
 function Base.:%(x::TwicePrecision{F}, S::Type{<:Signed}) where {F<:Base.IEEEFloat}
     (Signed(x.hi/eps(x.hi)) % S) << exponent(eps(x.hi)) +
     (Signed(x.lo/eps(x.lo)) % S) << exponent(eps(x.lo))
 end
 
 # how many powers of two divide an integer-valued TwicePrecision
-tz(x::TwicePrecision) = trailing_zeros(x % Signed)
+tz(x::TwicePrecision) = trailing_zeros(x % Int128)
 
 # more accurate ring operations on integer-valued TwicePrecision
 function int_op(op::Function, x::TwicePrecision, y::TwicePrecision)
@@ -162,10 +164,13 @@ function continued_fraction(V::Interval)
     𝟘, 𝟙 = zero(T), one(T)
     a = d = 𝟙
     b = c = 𝟘
+    close = false
     while y ≠ 𝟘
         q, r = divrem(x, y)
-        a, b, c, d = q*̇a+̇b, a, q*̇c+̇d, c
-        push!(R, (a+̇b, c+̇d))
+        a, b, c, d = q*̇a +̇ b, a, q*̇c +̇ d, c
+        ab, cd = a +̇ b, c +̇ d
+        close = close || ab/cd ∈ V
+        close && push!(R, (ab, cd))
         x, y = y, r
     end
     return R
@@ -213,9 +218,11 @@ Base.inv(x::TwicePrecision) = one(typeof(x))/x
 Base.abs(x::TwicePrecision) = signbit(x.hi) ? -x : x
 Base.isnan(x::TwicePrecision) = isnan(x.hi) | isnan(x.lo)
 Base.isless(x::TwicePrecision, y::TwicePrecision) = x < y
-Base.bitstring(n::BigInt) = string(n, base=2)
+Base.exponent(x::TwicePrecision) = exponent(x.hi)
 
 int(x::TwicePrecision) = BigInt(x.hi) + BigInt(x.lo)
+
+Base.bitstring(n::BigInt) = string(n, base=2)
 
 function lift_range(a::Float64, s::Float64, b::Float64)
     A = Interval(a)
