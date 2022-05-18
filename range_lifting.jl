@@ -2,133 +2,16 @@
 
 using Base: TwicePrecision
 
-function ratio(x::TwicePrecision{<:AbstractFloat})
-    d = inv(iszero(x.lo) ? eps(x.hi) : eps(x.lo))
-    return x*d, TwicePrecision(d)
-end
-
-# exact 2^(8*sizeof(F)) modulus of an integer-valued TwicePrecision
-function Base.:%(x::TwicePrecision{F}, Signed) where {F<:Base.IEEEFloat}
-    Signed(x.hi/eps(x.hi)) << exponent(eps(x.hi)) +
-    Signed(x.lo/eps(x.lo)) << exponent(eps(x.lo))
-end
-
-# how many powers of two divide an integer-valued TwicePrecision
-tz(x::TwicePrecision) = trailing_zeros(x % Signed)
-
-# more accurate ring operations on integer-valued TwicePrecision
-function int_op(op::Function, x::TwicePrecision, y::TwicePrecision)
-    z = op(x, y)
-    z += op(x % Signed, y % Signed) - (z % Signed)
-end
-
-+̇(x::TwicePrecision, y::TwicePrecision) = int_op(+, x, y)
--̇(x::TwicePrecision, y::TwicePrecision) = int_op(-, x, y)
-*̇(x::TwicePrecision, y::TwicePrecision) = int_op(*, x, y)
-
-function simplest_rational(V::Interval{F})
-    𝟘, 𝟙 = zero(V.lo), one(V.lo)
-    if y < 𝟘
-        N, D = simplest_rational(-V)
-        return -N, D
-    end
-    N = pick_int(V)
-    !isnan(N) && return N, 𝟙
-    Λ = inv(V)
-    D = pick_int(Λ)
-    !isnan(D) && return 𝟙, D
-
-    N₁, D₁ = simplest_rational_core(V)
-    D₂, N₂ = simplest_rational_core(Λ)
-
-    if D₂ < 𝟘
-        N₂ = -N₂
-        D₂ = abs(D₂)
-    end
-
-    g₁ = tz(N₁) + tz(D₁)
-    g₂ = tz(N₂) + tz(D₂)
-
-    g₁ > g₂ && return N₁, D₁
-    g₁ < g₂ && return N₂, D₂
-
-    g₁ = abs(N₁) + D₁
-    g₂ = abs(N₂) + D₂
-
-    g₁ ≥ g₂ ? (N₁, D₁) : (N₂, D₂)
-end
-
-function simplest_rational_core(V::Interval{F})
-    𝟘, 𝟙 = zero(V.lo), one(V.lo)
-
-    s, t = ratio(V.lo)
-    u, v = ratio(V.hi)
-
-    a = d = 𝟙
-    b = c = 𝟘
-
-    while true
-        q = s ÷ t
-        s, t, u, v = v, u-q*v, t, s-q*t
-        a, b, c, d = b+q*a, a, d+q*c, c
-        s < t && break
-    end
-
-    N, D = a + b, c + d
-    N = pick_int(D*V)
-    D = pick_int(N/V)
-
-    return N, D
-end
-
-Base.zero(x::TwicePrecision) = zero(typeof(x))
-Base.one(x::TwicePrecision) = one(typeof(x))
-Base.one(T::Type{<:TwicePrecision}) = T(1, 0)
-
-Base.copy(x::TwicePrecision) = x
-
-function Base.round(
-    x::TwicePrecision{<:AbstractFloat},
-    r::RoundingMode{mode} = RoundNearest,
-) where {mode}
-    if eps(x.hi) ≥ 1
-        flip = mode in (:ToZero, :FromZero) && x.hi*x.lo < 0
-        r_lo = flip ? -round(-x.lo, r) : round(x.lo, r)
-        return TwicePrecision(x.hi, r_lo)
-    else
-        next = nextfloat(x.hi, Int(sign(x.lo)))
-        this = round(x.hi, r)
-        that = round(next, r)
-        this == that && return TwicePrecision(this)
-        edge = mode in (:ToZero, :FromZero, :Up, :Down) ? 0.0 : 0.5
-        frac = abs(x.hi - this)
-        return TwicePrecision(frac == edge ? that : this)
-    end
-end
-
-function Base.div(
-    a::TwicePrecision{T},
-    b::TwicePrecision{T},
-    r::RoundingMode,
-) where {T}
-    round(a/b, r)
-end
-
-Base.inv(x::TwicePrecision) = one(typeof(x))/x
-Base.abs(x::TwicePrecision) = signbit(x.hi) ? -x : x
-Base.isnan(x::TwicePrecision) = isnan(x.hi) | isnan(x.lo)
-Base.isless(x::TwicePrecision, y::TwicePrecision) = x < y
-Base.bitstring(n::BigInt) = string(n, base=2)
-
-int(x::TwicePrecision) = BigInt(x.hi) + BigInt(x.lo)
-
-mid(a::Float64, b::Float64) = TwicePrecision(0.5a) + TwicePrecision(0.5b)
+# Intervals of TwicePrecisions
 
 struct Interval{F<:AbstractFloat} <: Number
     lo::TwicePrecision{F}
     hi::TwicePrecision{F}
 end
 Interval(x::AbstractFloat) = Interval(mid(prevfloat(x), x), mid(x, nextfloat(x)))
+
+mid(a::Float64, b::Float64) = TwicePrecision(0.5a) + TwicePrecision(0.5b)
+mid(V::Interval) = 0.5V.lo + 0.5V.hi
 
 # TODO: maybe unroll/optimize this
 @inline lo_hi(op::Function, U::Interval, V::Interval) =
@@ -145,12 +28,19 @@ Base.:+(x::Real, V::Interval) = typeof(V)(x + V.lo, x + V.hi)
 Base.:*(x::Real, V::Interval) = typeof(V)(minmax(x*V.lo, x*V.hi)...)
 Base.:*(x::TwicePrecision, V::Interval) = Interval(minmax(x*V.lo, x*V.hi)...)
 Base.:/(V::Interval, x::TwicePrecision) = Interval(minmax(V.lo/x, V.hi/x)...)
+Base.:/(x::TwicePrecision, V::Interval) = Interval(minmax(x/V.lo, x/V.hi)...)
 
 Base.inv(U::Interval) = Interval(minmax(inv(U.lo), inv(U.hi))...)
 
-simplest_rational(V::Interval) = simplest_rational(V.lo, V.hi)
-
 ilog10(x::TwicePrecision) = Int(floor(log10(x.hi))) # TODO: approximate
+
+function shrink_int(V::Interval)
+    lo = round(V.lo, RoundUp)
+    hi = round(V.hi, RoundDown)
+    lo ≤ hi && return Interval(lo, hi)
+    r = round(0.5V.lo + 0.5V.hi)
+    return Interval(r, r)
+end
 
 # pick integer in the interval with the most trailing zeros
 function pick_int(V::Interval{F}) where {F<:AbstractFloat}
@@ -186,10 +76,159 @@ function pick_int(V::Interval{F}) where {F<:AbstractFloat}
     return n
 end
 
+function ratio(x::TwicePrecision{<:AbstractFloat})
+    d = inv(iszero(x.lo) ? eps(x.hi) : eps(x.lo))
+    return x*d, TwicePrecision(d)
+end
+
+# exact modulus of an integer-valued TwicePrecision
+function Base.:%(x::TwicePrecision{F}, S::Type{<:Signed}) where {F<:Base.IEEEFloat}
+    (Signed(x.hi/eps(x.hi)) % S) << exponent(eps(x.hi)) +
+    (Signed(x.lo/eps(x.lo)) % S) << exponent(eps(x.lo))
+end
+
+# how many powers of two divide an integer-valued TwicePrecision
+tz(x::TwicePrecision) = trailing_zeros(x % Signed)
+
+# more accurate ring operations on integer-valued TwicePrecision
+function int_op(op::Function, x::TwicePrecision, y::TwicePrecision)
+    z = op(x, y)
+    z += op(x % Signed, y % Signed) - (z % Signed)
+end
+
++̇(x::TwicePrecision, y::TwicePrecision) = int_op(+, x, y)
+-̇(x::TwicePrecision, y::TwicePrecision) = int_op(-, x, y)
+*̇(x::TwicePrecision, y::TwicePrecision) = int_op(*, x, y)
+
+function simplest_rational(V::Interval)
+    𝟘, 𝟙 = zero(V.lo), one(V.lo)
+    if V.hi < 𝟘
+        N, D = simplest_rational(-V)
+        return -N, D
+    end
+    N = pick_int(V)
+    !isnan(N) && return N, 𝟙
+    Λ = inv(V)
+    D = pick_int(Λ)
+    !isnan(D) && return 𝟙, D
+
+    N₁, D₁ = simplest_rational_core(V)
+    D₂, N₂ = simplest_rational_core(Λ)
+
+    if D₂ < 𝟘
+        N₂ = -N₂
+        D₂ = abs(D₂)
+    end
+
+    g₁ = tz(N₁) + tz(D₁)
+    g₂ = tz(N₂) + tz(D₂)
+
+    g₁ > g₂ && return N₁, D₁
+    g₁ < g₂ && return N₂, D₂
+
+    g₁ = abs(N₁) + D₁
+    g₂ = abs(N₂) + D₂
+
+    g₁ ≥ g₂ ? (N₁, D₁) : (N₂, D₂)
+end
+
+function simplest_rational_core(V::Interval)
+    𝟘, 𝟙 = zero(V.lo), one(V.lo)
+
+    s, t = ratio(V.lo)
+    u, v = ratio(V.hi)
+
+    a = d = 𝟙
+    b = c = 𝟘
+
+    while true
+        q = s ÷ t
+        s, t, u, v = v, u-q*v, t, s-q*t
+        a, b, c, d = b+q*a, a, d+q*c, c
+        s < t && break
+    end
+
+    N, D = a + b, c + d
+    N = pick_int(D*V)
+    D = pick_int(N/V)
+
+    return N, D
+end
+
+function continued_fraction(V::Interval)
+    x, y = ratio(mid(V))
+    T = typeof(x)
+    R = Tuple{T,T}[]
+    𝟘, 𝟙 = zero(T), one(T)
+    a = d = 𝟙
+    b = c = 𝟘
+    while y ≠ 𝟘
+        q, r = divrem(x, y)
+        a, b, c, d = q*̇a+̇b, a, q*̇c+̇d, c
+        push!(R, (a+̇b, c+̇d))
+        x, y = y, r
+    end
+    return R
+end
+
+Base.zero(x::TwicePrecision) = zero(typeof(x))
+Base.one(x::TwicePrecision) = one(typeof(x))
+Base.one(T::Type{<:TwicePrecision}) = T(1, 0)
+
+Base.copy(x::TwicePrecision) = x
+
+function Base.round(
+    x::TwicePrecision{<:AbstractFloat},
+    R::RoundingMode{mode} = RoundNearest,
+) where {mode}
+    if eps(x.hi) ≥ 1
+        flip = mode in (:ToZero, :FromZero) && x.hi*x.lo < 0
+        r_lo = flip ? -round(-x.lo, R) : round(x.lo, R)
+        return TwicePrecision(x.hi, r_lo)
+    else
+        next = nextfloat(x.hi, Int(sign(x.lo)))
+        this = round(x.hi, R)
+        that = round(next, R)
+        this == that && return TwicePrecision(this)
+        edge = mode in (:ToZero, :FromZero, :Up, :Down) ? 0.0 : 0.5
+        frac = abs(x.hi - this)
+        return TwicePrecision(frac == edge ? that : this)
+    end
+end
+
+function Base.div(
+    a::TwicePrecision{T},
+    b::TwicePrecision{T},
+    R::RoundingMode,
+) where {T}
+    round(a/b, R)
+end
+
+function Base.divrem(a::TwicePrecision, b::TwicePrecision, R::RoundingMode)
+    q = div(a, b, R)
+    q, a -̇ q*̇b
+end
+
+Base.inv(x::TwicePrecision) = one(typeof(x))/x
+Base.abs(x::TwicePrecision) = signbit(x.hi) ? -x : x
+Base.isnan(x::TwicePrecision) = isnan(x.hi) | isnan(x.lo)
+Base.isless(x::TwicePrecision, y::TwicePrecision) = x < y
+Base.bitstring(n::BigInt) = string(n, base=2)
+
+int(x::TwicePrecision) = BigInt(x.hi) + BigInt(x.lo)
+
 function lift_range(a::Float64, s::Float64, b::Float64)
     A = Interval(a)
     S = Interval(s)
     B = Interval(b)
+    N = shrink_int((B - A)/S)
+
+    for _ = 1:3
+        S &= (B - A)/N
+        B &= A + N*S
+        A &= B - N*S
+        N = shrink_int((B - A)/S)
+    end
 
     X = A/S
     Y = B/S
