@@ -27,6 +27,7 @@ Base.:/(U::Interval, V::Interval) = Interval(lo_hi(/, U, V)...)
 Base.:&(U::Interval, V::Interval) = Interval(max(U.lo, V.lo), min(U.hi, V.hi))
 
 Base.:+(x::Real, V::Interval) = typeof(V)(x + V.lo, x + V.hi)
+Base.:-(V::Interval, x::TwicePrecision) = typeof(V)(V.lo - x, V.hi - x)
 Base.:*(x::Real, V::Interval) = typeof(V)(minmax(x*V.lo, x*V.hi)...)
 Base.:*(x::TwicePrecision, V::Interval) = Interval(minmax(x*V.lo, x*V.hi)...)
 Base.:/(V::Interval, x::TwicePrecision) = Interval(minmax(V.lo/x, V.hi/x)...)
@@ -35,6 +36,8 @@ Base.:/(x::TwicePrecision, V::Interval) = Interval(minmax(x/V.lo, x/V.hi)...)
 Base.inv(U::Interval) = Interval(minmax(inv(U.lo), inv(U.hi))...)
 
 ilog10(x::TwicePrecision) = Int(floor(log10(x.hi))) # TODO: approximate
+
+Base.isinteger(x::TwicePrecision) = isinteger(x.lo) & isinteger(x.hi)
 
 function shrink_int(V::Interval)
     lo = round(V.lo, RoundUp)
@@ -51,12 +54,12 @@ function pick_int(V::Interval{F}) where {F<:AbstractFloat}
     V.lo ≤ 𝟘 && return 𝟘
     lo = round(V.lo, RoundUp)
     hi = round(V.hi, RoundDown)
-    lo > hi && return oftype(lo, NaN)
-    lo < hi || return lo
+    lo ≤ hi || return mid(V)
+    lo == hi && return lo
     @assert 𝟘 < lo < hi
 
     # find range of at most 10 good candidates
-    l = ilog10(hi -̇ lo)
+    l = ilog10(hi - lo)
     m = Int(floor(log(5, maxintfloat(F))))
     q, r = divrem(l, m)
     p = Base.power_by_squaring(TwicePrecision(F(10)^m), q)
@@ -98,9 +101,9 @@ function int_op(op::Function, x::TwicePrecision, y::TwicePrecision)
     z += op(x % Signed, y % Signed) - (z % Signed)
 end
 
-+̇(x::TwicePrecision, y::TwicePrecision) = int_op(+, x, y)
--̇(x::TwicePrecision, y::TwicePrecision) = int_op(-, x, y)
-*̇(x::TwicePrecision, y::TwicePrecision) = int_op(*, x, y)
+# +̇(x::TwicePrecision, y::TwicePrecision) = int_op(+, x, y)
+# -̇(x::TwicePrecision, y::TwicePrecision) = int_op(-, x, y)
+# *̇(x::TwicePrecision, y::TwicePrecision) = int_op(*, x, y)
 
 function simplest_rational(V::Interval)
     𝟘, 𝟙 = zero(V.lo), one(V.lo)
@@ -109,10 +112,10 @@ function simplest_rational(V::Interval)
         return -N, D
     end
     N = pick_int(V)
-    !isnan(N) && return N, 𝟙
+    isinteger(N) && return N, 𝟙
     Λ = inv(V)
     D = pick_int(Λ)
-    !isnan(D) && return 𝟙, D
+    isinteger(D) && return 𝟙, D
 
     N₁, D₁ = simplest_rational_core(V)
     D₂, N₂ = simplest_rational_core(Λ)
@@ -164,13 +167,13 @@ function continued_fraction(V::Interval)
     𝟘, 𝟙 = zero(T), one(T)
     a = d = 𝟙
     b = c = 𝟘
-    close = false
+    interior = false
     while y ≠ 𝟘
         q, r = divrem(x, y)
-        a, b, c, d = q*̇a +̇ b, a, q*̇c +̇ d, c
-        ab, cd = a +̇ b, c +̇ d
-        close = close || ab/cd ∈ V
-        close && push!(R, (ab, cd))
+        a, b, c, d = q*̇a + b, a, q*̇c + d, c
+        ab, cd = a + b, c + d
+        interior = interior || ab/cd ∈ V
+        interior && push!(R, (ab, cd))
         x, y = y, r
     end
     return R
@@ -211,7 +214,7 @@ end
 
 function Base.divrem(a::TwicePrecision, b::TwicePrecision, R::RoundingMode)
     q = div(a, b, R)
-    q, a -̇ q*̇b
+    q, a - q*̇b
 end
 
 Base.inv(x::TwicePrecision) = one(typeof(x))/x
@@ -225,73 +228,45 @@ int(x::TwicePrecision) = BigInt(x.hi) + BigInt(x.lo)
 Base.bitstring(n::BigInt) = string(n, base=2)
 
 function lift_range(a::Float64, s::Float64, b::Float64)
+    T = TwicePrecision{Float64}
+    𝟘, 𝟙 = zero(T), one(T)
+
     A = Interval(a)
     S = Interval(s)
     B = Interval(b)
-    N = shrink_int((B - A)/S)
-
-    for _ = 1:3
-        S &= (B - A)/N
-        B &= A + N*S
-        A &= B - N*S
-        N = shrink_int((B - A)/S)
-    end
 
     X = A/S
     Y = B/S
     x = pick_int(X)
     y = pick_int(Y)
 
-    # TODO: handle case where S is integral
-
-    if !isnan(x) && !isnan(y) # x & y are integers
-        # tighten bounds on S, A, B
-        S &= A/x
-        S &= B/y
-        N, D = simplest_rational(S)
-        q = x # already an integer
-        z = zero(q)
-        ŝ = N/D
-    else # x & y are non-integers
-        N = (B - A)/S
-        n = pick_int(N)
-        isnan(n) && error("infeasible range")
-        
+    if isinteger(x) && isinteger(y)
+        # offset is exactly zero
+        ff = 𝟘, 𝟙
+    else
+        isinteger(x) || (x = round(X.lo, RoundDown))
+        isinteger(y) || (y = round(Y.lo, RoundDown))
+        F = (X - x) & (Y - y)
+        @assert 𝟘 < F.lo < F.hi < 𝟙
+        # infeasible if this interval is empty
+        ff = simplest_rational(F)
+        f = /(ff...)
+        x += f
+        y += f
     end
 
-    n = pick_int((B - A)/S)
-    R = (A + B)/(A - B)
-    Q = -0.5n*(1 + R)
+    # find a nice rational step
+    S &= A/x
+    S &= B/y
+    ss = simplest_rational(S)
+    ŝ = /(ss...)
 
-    # want simple f such that a - (q + f)*s == 0
-    #   where q ∈ ℤ and |f| ≤ 1/2
-    h = -0.5n
-    q = round(-0.5n*(1 + R))
-    f⁻ = h*(1 + r⁺) - q
-    f⁺ = h*(1 + r⁻) - q
-    # define x = a/s, y = b/s
-    # f = F/d, x = X/d, y = Y/d
-    F, d = simplest_rational(f⁻, f⁺)
-    X = F + q*d # x = f + q = (F + q*d)/d
-    Y = X + n*d # y = x + n = (X + n*d)/d
+    # compute offsets & length
+    q = round(x, RoundDown)
+    z = /((ff .* ss)...)
+    n = y - x
 
-    # tighten bounds on `s`
-    # s = a/x = a/(X/d) = a*d/X
-    s⁻′, s⁺′ = minmax(a⁻*d/X, a⁺*d/X)
-    s⁻ = max(s⁻, s⁻′)
-    s⁺ = min(s⁺, s⁺′)
-    # s = b/y = b/(Y/d) = b*d/Y
-    s⁻′, s⁺′ = minmax(b⁻*d/Y, b⁺*d/Y)
-    s⁻ = max(s⁻, s⁻′)
-    s⁺ = min(s⁺, s⁺′)
-
-    # simplest rational for `s`
-    S, D = simplest_rational(s⁻, s⁺)
-
-    # compute the zero point and step
-    z = (F*S)/(D*d)
-    ŝ = S/D
-
-    rg(k) = z + (k +̇ q)*ŝ
+    # range computation
+    rg(k) = z + (k + q)*ŝ
     [rg(k) for k = 0:Int(n)]
 end
