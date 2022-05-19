@@ -107,10 +107,14 @@ end
 
 function simplest_rational(V::Interval)
     𝟘, 𝟙 = zero(V.lo), one(V.lo)
+
+    # reduce to positive case
     if V.hi < 𝟘
         N, D = simplest_rational(-V)
         return -N, D
     end
+
+    # check if V or 1/V contain integers
     N = pick_int(V)
     isinteger(N) && return N, 𝟙
     Λ = inv(V)
@@ -120,21 +124,7 @@ function simplest_rational(V::Interval)
     N₁, D₁ = simplest_rational_core(V)
     D₂, N₂ = simplest_rational_core(Λ)
 
-    if D₂ < 𝟘
-        N₂ = -N₂
-        D₂ = abs(D₂)
-    end
-
-    g₁ = tz(N₁) + tz(D₁)
-    g₂ = tz(N₂) + tz(D₂)
-
-    g₁ > g₂ && return N₁, D₁
-    g₁ < g₂ && return N₂, D₂
-
-    g₁ = abs(N₁) + D₁
-    g₂ = abs(N₂) + D₂
-
-    g₁ ≥ g₂ ? (N₁, D₁) : (N₂, D₂)
+    tz(N₁) + tz(D₁) ≥ tz(N₂) + tz(D₂) ? (N₁, D₁) : (N₂, D₂)
 end
 
 function simplest_rational_core(V::Interval)
@@ -170,7 +160,7 @@ function continued_fraction(V::Interval)
     interior = false
     while y ≠ 𝟘
         q, r = divrem(x, y)
-        a, b, c, d = q*̇a + b, a, q*̇c + d, c
+        a, b, c, d = q*a + b, a, q*̇c + d, c
         ab, cd = a + b, c + d
         interior = interior || ab/cd ∈ V
         interior && push!(R, (ab, cd))
