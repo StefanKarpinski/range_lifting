@@ -47,36 +47,20 @@ function shrink_int(V::Interval)
     return Interval(r, r)
 end
 
-# pick integer in the interval with the most trailing zeros
-function pick_int(V::Interval{F}) where {F<:AbstractFloat}
-    𝟘 = zero(V.lo)
-    V.hi < 𝟘 && return -pick_int(-V)
-    V.lo ≤ 𝟘 && return 𝟘
-    lo = round(V.lo, RoundUp)
-    hi = round(V.hi, RoundDown)
-    lo ≤ hi || return mid(V)
+# pick value in interval with the most trailing zeros
+function pick_max_tz(V::Interval{F}) where {F<:AbstractFloat}
+    lo, hi = V.lo, V.hi
     lo == hi && return lo
+    𝟘 = zero(lo)
+    hi < 𝟘 && return -pick_max_tz(-V)
+    lo ≤ 𝟘 && return 𝟘
     @assert 𝟘 < lo < hi
-
-    # find range of at most 10 good candidates
-    l = ilog10(hi - lo)
-    m = Int(floor(log(5, maxintfloat(F))))
-    q, r = divrem(l, m)
-    p = Base.power_by_squaring(TwicePrecision(F(10)^m), q)
-    p *= F(10)^r
-    n = round(lo/p, RoundUp)
-    h = round(hi/p, RoundDown)
-
-    # pick the one with the most factors of two
-    n′ = n
-    g = tz(n′)
-    while (n′ += 1) ≤ h
-        (g′ = tz(n′)) > g || continue
-        g, n = g′, n′
-    end
-
-    # remultiply by p
-    n *= p
+    e = exponent(hi - lo)
+    a = round(lo*exp2(-e), RoundUp)
+    b = round(hi*exp2(-e), RoundDown)
+    @assert a ≤ b ≤ a + 1
+    c = tz(a) ≥ tz(b) ? a : b
+    n = c*exp2(e)
     @assert lo ≤ n ≤ hi
     return n
 end
@@ -115,10 +99,10 @@ function simplest_rational(V::Interval)
     end
 
     # check if V or 1/V contain integers
-    N = pick_int(V)
+    N = pick_max_tz(V)
     isinteger(N) && return N, 𝟙
     Λ = inv(V)
-    D = pick_int(Λ)
+    D = pick_max_tz(Λ)
     isinteger(D) && return 𝟙, D
 
     N₁, D₁ = simplest_rational_core(V)
@@ -144,8 +128,8 @@ function simplest_rational_core(V::Interval)
     end
 
     N, D = a + b, c + d
-    N = pick_int(D*V)
-    D = pick_int(N/V)
+    N = pick_max_tz(D*V)
+    D = pick_max_tz(N/V)
 
     return N, D
 end
@@ -174,6 +158,11 @@ Base.one(x::TwicePrecision) = one(typeof(x))
 Base.one(T::Type{<:TwicePrecision}) = T(1, 0)
 
 Base.copy(x::TwicePrecision) = x
+
+function Base.:(==)(x::TwicePrecision, y::TwicePrecision)
+    d = x - y
+    iszero(d.hi) && iszero(d.lo)
+end
 
 function Base.round(
     x::TwicePrecision{<:AbstractFloat},
@@ -227,8 +216,8 @@ function lift_range(a::Float64, s::Float64, b::Float64)
 
     X = A/S
     Y = B/S
-    x = pick_int(X)
-    y = pick_int(Y)
+    x = pick_max_tz(X)
+    y = pick_max_tz(Y)
 
     if isinteger(x) && isinteger(y)
         # offset is exactly zero
