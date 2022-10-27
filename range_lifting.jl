@@ -239,7 +239,7 @@ function lift_range(a::Float64, s::Float64, b::Float64)
         F = (X - x) & (Y - y)
         @assert 𝟘 < F.lo < F.hi < 𝟙
         # infeasible if this interval is empty
-        ff = simplest_rational(F)
+        ff = simplest_rational_core(F)
         f = /(ff...)
         x += f
         y += f
