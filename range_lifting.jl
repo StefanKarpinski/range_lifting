@@ -10,7 +10,7 @@ struct Interval{F<:AbstractFloat} <: Number
 end
 Interval(x::AbstractFloat) = Interval(mid(prevfloat(x), x), mid(x, nextfloat(x)))
 
-Base.in(r::Union{Real,TwicePrecision}, V::Interval) = V.lo ≤ r ≤ V.hi
+Base.in(r::Union{Real,TwicePrecision}, V::Interval) = V.lo ≤ r ≤ V.hi
 
 mid(a::Float64, b::Float64) = TwicePrecision(0.5a) + TwicePrecision(0.5b)
 mid(V::Interval) = 0.5V.lo + 0.5V.hi
@@ -42,7 +42,7 @@ Base.isinteger(x::TwicePrecision) = isinteger(x.lo) & isinteger(x.hi)
 function shrink_int(V::Interval)
     lo = round(V.lo, RoundUp)
     hi = round(V.hi, RoundDown)
-    lo ≤ hi && return Interval(lo, hi)
+    lo ≤ hi && return Interval(lo, hi)
     r = round(0.5V.lo + 0.5V.hi)
     return Interval(r, r)
 end
@@ -58,7 +58,7 @@ function pick_max_tz(V::Interval{F}) where {F<:AbstractFloat}
     e = exponent(hi - lo)
     a = round(lo*exp2(-e), RoundUp)
     b = round(hi*exp2(-e), RoundDown)
-    @assert a ≤ b ≤ a + 1
+    @assert a ≤ b ≤ a + 1
     c = tz(a) ≥ tz(b) ? a : b
     n = c*exp2(e)
     @assert lo ≤ n ≤ hi
@@ -117,15 +117,25 @@ function simplest_rational_core(V::Interval)
     s, t = ratio(V.lo)
     u, v = ratio(V.hi)
 
+    S = [int(s)]
+    T = [int(t)]
+    U = [int(u)]
+    V = [int(v)]
+
     a = d = 𝟙
     b = c = 𝟘
 
     while true
-        q = s ÷ t
-        s, t, u, v = v, u-q*v, t, s-q*t
+        q = s ÷ t # q, r = divrem(s, t)
+        s, t, u, v = v, u-q*v, t, s-q*t # r
+        S, T, U, V = V, [U; int(q*v)], T, [S; int(q*t)]
         a, b, c, d = b+q*a, a, d+q*c, c
         s < t && break
     end
+    @show map(bitstring, S)
+    @show map(bitstring, T)
+    @show map(bitstring, U)
+    @show map(bitstring, V)
 
     N, D = a + b, c + d
     N = pick_max_tz(D*V)
