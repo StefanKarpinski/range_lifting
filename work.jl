@@ -3,18 +3,20 @@ function tz(x::AbstractFloat)
     trailing_zeros(n) + p
 end
 
+tz(n::Integer) = trailing_zeros(n)
+
 # pick value in interval with the most trailing zeros
 function simplest_float(lo::T, hi::T) where {T<:AbstractFloat}
     lo == hi && return lo
     hi < 0 && return -simplest_float(-hi, -lo)
     lo ≤ 0 && return zero(T)
-    @assert 0 < lo < hi
+    # @assert 0 < lo < hi
     e = exponent(hi - lo)
     b = floor(ldexp(hi, -e))
     a = max(lo, ldexp(b - 1, e))
     b = ldexp(b, e)
     m = tz(a) ≥ tz(b) ? a : b
-    @assert lo ≤ m ≤ hi
+    # @assert lo ≤ m ≤ hi
     return m
 end
 
@@ -29,16 +31,16 @@ function simplest_rational(
     b = c = 𝟘
 
     while true
-        q = (s - 𝟙) ÷ t
+        q = s ÷ t
         s, t, u, v = v, u-q*v, t, s-q*t
         a, b, c, d = b+q*a, a, d+q*c, c
-        s ≤ t && break
+        s < t && break
     end
 
     return a + b, c + d
 end
 
-function ratio(x::AbstractFloat)
+function ratio_p(x::AbstractFloat)
     n, p, s = Base.decompose(x)
     z = trailing_zeros(n)
     n >>>= z
@@ -46,9 +48,14 @@ function ratio(x::AbstractFloat)
     s*n, p
 end
 
+function ratio(x::AbstractFloat)
+    n, p = ratio_p(x)
+    n, exp2(p)
+end
+
 function ratio(x::T, y::T) where {T<:AbstractFloat}
-    x_n, x_p = ratio(x)
-    y_n, y_p = ratio(y)
+    x_n, x_p = ratio_p(x)
+    y_n, y_p = ratio_p(y)
     p = x_p - y_p
     n = T(x_n)
     d = T(y_n)
@@ -105,11 +112,12 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     f_lo = ratio_max(f_a_lo, f_b_lo)
     f_hi = ratio_min(f_a_hi, f_b_hi)
 
+    # otherwise can't hit endpoint
     @assert f_lo[1]*f_hi[2] ≤ f_hi[1]*f_lo[2]
-    # otherwise can't hit endpoint; possible approach:
-    # continue using only a, ignoring the b endpoint
 
-    _, d = simplest_rational(f_lo, f_hi)
+    # find simplest possible n here
+
+    f_n, d = simplest_rational(f_lo, f_hi)
 
     c_lo = cld(d*a_lo[1], a_lo[2])
     c_hi = fld(d*a_hi[1], a_hi[2])
@@ -125,3 +133,5 @@ end
 
 # counter example: (a, s, b) = (-1e20, 3.0, 2e20)
 # problem: can be made to hit zero but shouldn't!
+# worse: (a, s, b) = (-1.0e17, 0.3, 2.0e18)
+# another: (a, s, b) = (-1e14, .9, 8e15)
