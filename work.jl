@@ -102,36 +102,40 @@ function ratio_min(
     x_n*y_d ≤ y_n*x_d ? (x_n, x_d) : (y_n, y_d)
 end
 
-function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
-    a_lo, a_hi = ratio_ival(a, s)
-    b_lo, b_hi = ratio_ival(b, s)
-
-    f_a_lo, f_a_hi = frac_part(a_lo, a_hi)
-    f_b_lo, f_b_hi = frac_part(b_lo, b_hi)
-
-    f_lo = ratio_max(f_a_lo, f_b_lo)
-    f_hi = ratio_min(f_a_hi, f_b_hi)
-
-    # otherwise can't hit endpoint
-    @assert f_lo[1]*f_hi[2] ≤ f_hi[1]*f_lo[2]
-
-    # find simplest possible n here
-
-    f_n, d = simplest_rational(f_lo, f_hi)
-
-    c_lo = cld(d*a_lo[1], a_lo[2])
-    c_hi = fld(d*a_hi[1], a_hi[2])
-    c = simplest_float(c_lo, c_hi)
-
-    e_lo = cld(d*b_lo[1], b_lo[2])
-    e_hi = fld(d*b_hi[1], b_hi[2])
-    e = simplest_float(e_lo, e_hi)
-
-    # length(r) == n + 1
-    n = e - c
-end
-
 # counter example: (a, s, b) = (-1e20, 3.0, 2e20)
 # problem: can be made to hit zero but shouldn't!
 # worse: (a, s, b) = (-1.0e17, 0.3, 2.0e18)
 # another: (a, s, b) = (-1e14, .9, 8e15)
+
+function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
+    a⁻, a⁺ = prevfloat(a), nextfloat(a)
+    s⁻, s⁺ = prevfloat(s), nextfloat(s)
+    b⁻, b⁺ = prevfloat(b), nextfloat(b)
+    n⁻ = cld(b⁻ - a⁺, s⁺)
+    n⁺ = fld(b⁺ - a⁻, s⁻)
+    n = simplest_float(n⁻, n⁺)
+    p_n = tz(n)
+    # otherwise can't hit endpoint
+    @assert p_n ≥ 0
+    # find best grid divisor
+    c = d = e = 0
+    while true
+        # next divisor
+        d += 1
+        # find simplest c
+        c⁻ = cld(d*a⁻, s⁺)
+        c⁺ = fld(d*a⁺, s⁻)
+        c = simplest_float(c⁻, c⁺)
+        p_c = tz(c)
+        p_c ≥ p_n || continue
+        # find simplest e
+        e⁻ = cld(d*b⁻, s⁺)
+        e⁺ = fld(d*b⁺, s⁻)
+        e = simplest_float(e⁻, e⁺)
+        p_e = tz(e)
+        p_e ≥ p_n || continue
+        # found good c & e
+        break
+    end
+    return d, c, e
+end
