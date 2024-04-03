@@ -10,13 +10,13 @@ function simplest_float(lo::T, hi::T) where {T<:AbstractFloat}
     lo == hi && return lo
     hi < 0 && return -simplest_float(-hi, -lo)
     lo ≤ 0 && return zero(T)
-    # @assert 0 < lo < hi
+    @assert 0 < lo < hi
     e = exponent(hi - lo)
     b = floor(ldexp(hi, -e))
     a = max(lo, ldexp(b - 1, e))
     b = ldexp(b, e)
     m = tz(a) ≥ tz(b) ? a : b
-    # @assert lo ≤ m ≤ hi
+    @assert lo ≤ m ≤ hi
     return m
 end
 
@@ -64,7 +64,7 @@ function ratio(x::T, y::T) where {T<:AbstractFloat}
     elseif p < 0
         d *= exp2(-p)
     end
-    return n, d
+    return flipsign(n, d), abs(d)
 end
 
 function ratio_ival(x::T, y::T) where {T<:AbstractFloat}
@@ -102,40 +102,112 @@ function ratio_min(
     x_n*y_d ≤ y_n*x_d ? (x_n, x_d) : (y_n, y_d)
 end
 
+function ratio_max(
+    x::Tuple{T,T},
+    y::Tuple{T,T},
+    z::Tuple{T,T},
+) where {T<:AbstractFloat}
+    ratio_max(ratio_max(x, y), z)
+end
+
+function ratio_min(
+    x::Tuple{T,T},
+    y::Tuple{T,T},
+    z::Tuple{T,T},
+) where {T<:AbstractFloat}
+    ratio_min(ratio_min(x, y), z)
+end
+
+function canonicalize(bigger::T, smaller::T) where {T<:AbstractFloat}
+    h = bigger + smaller
+    h, (bigger - h) + smaller
+end
+
+function div_hi_lo(x::T, y::T) where {T<:AbstractFloat}
+    xs, xe = frexp(x)
+    ys, ye = frexp(y)
+    r = xs / ys
+    rh, rl = canonicalize(r, -fma(r, ys, -xs)/ys)
+    ldexp(rh, xe-ye), ldexp(rl, xe-ye)
+end
+
 # counter example: (a, s, b) = (-1e20, 3.0, 2e20)
 # problem: can be made to hit zero but shouldn't!
 # worse: (a, s, b) = (-1.0e17, 0.3, 2.0e18)
 # another: (a, s, b) = (-1e14, .9, 8e15)
 
+struct FRange{T<:AbstractFloat} <: AbstractRange{T}
+    c::T
+    d::T
+    n::T
+    h::T
+    l::T
+end
+
+Base.length(r::FRange) = Int(r.n) + 1
+Base.step(r::FRange) = fma(r.d, r.h, r.d*r.l)
+
+function Base.getindex(r::FRange, i::Int)
+    k = fma(i-1, r.d, r.c)
+    x = fma(k, r.h, k*r.l)
+end
+
 function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     a⁻, a⁺ = prevfloat(a), nextfloat(a)
-    s⁻, s⁺ = prevfloat(s), nextfloat(s)
     b⁻, b⁺ = prevfloat(b), nextfloat(b)
+    s⁻, s⁺ = prevfloat(s), nextfloat(s)
+    if signbit(s)
+        s⁻, s⁺ = s⁺, s⁻
+    end
     n⁻ = cld(b⁻ - a⁺, s⁺)
     n⁺ = fld(b⁺ - a⁻, s⁻)
     n = simplest_float(n⁻, n⁺)
     p_n = tz(n)
     # otherwise can't hit endpoint
     @assert p_n ≥ 0
+    # make everything non-negative
+    if signbit(a)
+        a⁻, a⁺ = -a⁺, -a⁻
+    end        
+    if signbit(s)
+        s⁻, s⁺ = -s⁻, -s⁺
+    end
+    if signbit(b)
+        b⁻, b⁺ = -b⁺, -b⁻
+    end        
     # find best grid divisor
-    c = d = e = 0
+    c = d = e = zero(T)
     while true
-        # next divisor
-        d += 1
+        d += one(T)
         # find simplest c
         c⁻ = cld(d*a⁻, s⁺)
         c⁺ = fld(d*a⁺, s⁻)
+        c⁻ ≤ c⁺ || continue
         c = simplest_float(c⁻, c⁺)
         p_c = tz(c)
         p_c ≥ p_n || continue
         # find simplest e
         e⁻ = cld(d*b⁻, s⁺)
         e⁺ = fld(d*b⁺, s⁻)
+        e⁻ ≤ e⁺ || continue
         e = simplest_float(e⁻, e⁺)
         p_e = tz(e)
         p_e ≥ p_n || continue
         # found good c & e
         break
     end
-    return d, c, e
+    # have relative grid, find rational grid unit
+    g⁻ = ratio_max(ratio(a⁻, c), ratio(s⁻, d), ratio(b⁻, e))
+    g⁺ = ratio_min(ratio(a⁺, c), ratio(s⁺, d), ratio(b⁺, e))
+    g = simplest_rational(g⁻, g⁺)
+    # restore signs for endpoints
+    signbit(a) && (c = -c)
+    signbit(b) && (e = -e)
+    # these should be true
+    @assert a == c*g[1]/g[2]
+    @assert s == d*g[1]/g[2]
+    @assert b == e*g[1]/g[2]
+    # double precision grid unit:
+    h, l = div_hi_lo(g...)
+    FRange(c, d, n, h, l)
 end
