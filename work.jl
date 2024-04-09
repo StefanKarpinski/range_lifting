@@ -65,7 +65,7 @@ function ratio_p(x::AbstractFloat)
     z = trailing_zeros(n)
     n >>>= z
     p += z
-    s*n, p
+    s*oftype(x, n), p
 end
 
 function ratio(x::AbstractFloat)
@@ -74,38 +74,15 @@ function ratio(x::AbstractFloat)
 end
 
 function ratio(x::T, y::T) where {T<:AbstractFloat}
-    x_n, x_p = ratio_p(x)
-    y_n, y_p = ratio_p(y)
-    p = x_p - y_p
-    n = T(x_n)
-    d = T(y_n)
+    n, p = ratio_p(x)
+    d, q = ratio_p(y)
+    p -= q
     if p > 0
-        n *= exp2(p)
+        n = ldexp(n, p)
     elseif p < 0
-        d *= exp2(-p)
+        d = ldexp(d, -p)
     end
     return flipsign(n, d), abs(d)
-end
-
-function ratio_ival(x::T, y::T) where {T<:AbstractFloat}
-    neg = (x < 0) ⊻ (y < 0)
-    x = abs(x); y = abs(y)
-    lo_n, lo_d = ratio(prevfloat(x), nextfloat(y))
-    hi_n, hi_d = ratio(nextfloat(x), prevfloat(y))
-    if neg
-        hi_n, lo_n = -lo_n, -hi_n
-        hi_d, lo_d =  lo_d,  hi_d
-    end
-    return (lo_n, lo_d), (hi_n, hi_d)
-end
-
-function frac_part(
-    (lo_n, lo_d)::Tuple{T,T},
-    (hi_n, hi_d)::Tuple{T,T},
-) where {T<:AbstractFloat}
-    lo_q, lo_n = fldmod(lo_n, lo_d)
-    hi_n -= lo_q*hi_d
-    return (lo_n, lo_d), (hi_n, hi_d)
 end
 
 function ratio_max(
@@ -220,8 +197,8 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     d = ldexp(d, -z)
     e = ldexp(e, -z)
     # have relative grid, find rational grid unit
-    g⁻ = ratio_max(ratio(a⁻, c), ratio(s⁻, d), ratio(b⁻, e))
-    g⁺ = ratio_min(ratio(a⁺, c), ratio(s⁺, d), ratio(b⁺, e))
+    g⁻ = ratio_max(ratio(a⁻, c), ratio(b⁻, e))
+    g⁺ = ratio_min(ratio(a⁺, c), ratio(b⁺, e))
     g = simplest_rational(g⁻, g⁺)
     # restore signs for endpoints
     signbit(a) && (c = -c)
