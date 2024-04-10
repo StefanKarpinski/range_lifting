@@ -69,28 +69,30 @@ function canonicalize(large::T, small::T) where {T<:AbstractFloat}
 end
 
 function g_ival(a::T, c::T) where {T<:AbstractFloat}
+    a, c = abs(a), abs(c)
     h = a/c
-    δ = fma(-c, h, a) # δ == a - c*h
     # lower bound
     a⁻ = prevfloat(a)
-    l⁻ = nextfloat(0.5*(δ + fma(-c, h, a⁻))/c)
-    h⁻, l⁻ = canonicalize(h, l⁻)
+    h⁻ = h + 0.5*(fma(-c, h, a) + fma(-c, h, a⁻))/c
+    l⁻ = nextfloat(0.5*(fma(-c, h⁻, a) + fma(-c, h⁻, a⁻))/c)
+    @assert (h⁻, l⁻) == canonicalize(h⁻, l⁻)
+    @assert fma(c, h⁻, c*l⁻) > a⁻
     while fma(c, h⁻, c*l⁻) > a⁻
         l⁻ = prevfloat(l⁻)
     end
     l⁻ = nextfloat(l⁻)
-    h⁻, l⁻ = canonicalize(h⁻, l⁻)
     @assert fma(c, h⁻, c*l⁻) == a
     @assert fma(c, h⁻, c*prevfloat(l⁻)) == a⁻
     # upper bound
     a⁺ = nextfloat(a)
-    l⁺ = prevfloat(0.5*(δ + fma(-c, h, a⁺))/c)
-    h⁺, l⁺ = canonicalize(h, l⁺)
+    h⁺ = h + 0.5*(fma(-c, h, a) + fma(-c, h, a⁺))/c
+    l⁺ = prevfloat(0.5*(fma(-c, h⁺, a) + fma(-c, h⁺, a⁺))/c)
+    @assert (h⁺, l⁺) == canonicalize(h⁺, l⁺)
+    @assert fma(c, h⁺, c*l⁺) < a⁺
     while fma(c, h⁺, c*l⁺) < a⁺
         l⁺ = nextfloat(l⁺)
     end
     l⁺ = prevfloat(l⁺)
-    h⁺, l⁺ = canonicalize(h⁺, l⁺)
     @assert fma(c, h⁺, c*l⁺) == a
     @assert fma(c, h⁺, c*nextfloat(l⁺)) == a⁺
     # return interval
@@ -201,14 +203,13 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     # still need rational value g:
     #  - g = s/d = a/c = b/e
     # get double precision bounds on g:
-    g_a⁻, g_a⁺ = g_ival(abs(a), abs(c))
-    g_b⁻, g_b⁺ = g_ival(abs(b), abs(e))
+    g_a⁻, g_a⁺ = g_ival(a, c)
+    g_b⁻, g_b⁺ = g_ival(b, e)
     g⁻ = max_hi_lo(g_a⁻, g_b⁻)
     g⁺ = min_hi_lo(g_a⁺, g_b⁺)
-    h, l = canonicalize(
-        0.5*(g⁻[1] + g⁺[1]),
-        0.5*(g⁻[2] + g⁺[2]),
-    )
+    h = 0.5*(g⁻[1] + g⁺[1])
+    l = 0.5*(g⁻[2] + g⁺[2])
+    h, l = canonicalize(h, l)
     # check that this hits end-points and approximates step
     @assert a == fma(c, h, c*l)
     @assert s ≈  fma(d, h, d*l)
