@@ -139,7 +139,7 @@ end
 # worse: (a, s, b) = (-1.0e17, 0.3, 2.0e18)
 # another: (a, s, b) = (-1e14, .9, 8e15)
 
-function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
+function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     a⁻, a⁺ = prevfloat(a), nextfloat(a)
     b⁻, b⁺ = prevfloat(b), nextfloat(b)
     s⁻, s⁺ = prevfloat(s), nextfloat(s)
@@ -185,21 +185,34 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     c = ldexp(c, -z)
     d = ldexp(d, -z)
     e = ldexp(e, -z)
-    # have relative grid, find rational grid unit
-    g_a⁻, g_a⁺ = g_ival(abs(a), c)
-    g_b⁻, g_b⁺ = g_ival(abs(b), e)
-    g⁻ = max_hi_lo(g_a⁻, g_b⁻)
-    g⁺ = min_hi_lo(g_a⁺, g_b⁺)
-    # ...
-    g = simplest_rational(g⁻, g⁺)
     # restore signs for endpoints
     signbit(a) && (c = -c)
     signbit(b) && (e = -e)
-    # these should be true
-    @assert a ≈ c*g[1]/g[2]
-    @assert s ≈ d*g[1]/g[2]
-    @assert b ≈ e*g[1]/g[2]
-    # double precision grid unit:
-    h, l = div_hi_lo(g...)
+    # return values
+    n, c, d, e
+end
+
+function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
+    # find the relative grid ratios
+    n, c, d, e = range_ratios(a, s, b)
+    # integers such that:
+    #  - c = d*a/s
+    #  - e = d*b/s
+    # still need rational value g:
+    #  - g = s/d = a/c = b/e
+    # get double precision bounds on g:
+    g_a⁻, g_a⁺ = g_ival(abs(a), abs(c))
+    g_b⁻, g_b⁺ = g_ival(abs(b), abs(e))
+    g⁻ = max_hi_lo(g_a⁻, g_b⁻)
+    g⁺ = min_hi_lo(g_a⁺, g_b⁺)
+    h, l = canonicalize(
+        0.5*(g⁻[1] + g⁺[1]),
+        0.5*(g⁻[2] + g⁺[2]),
+    )
+    # check that this hits end-points and approximates step
+    @assert a == fma(c, h, c*l)
+    @assert s ≈  fma(d, h, d*l)
+    @assert b == fma(e, h, e*l)
+    # return range object
     FRange(c, d, n, h, l)
 end
