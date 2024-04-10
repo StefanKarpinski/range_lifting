@@ -206,11 +206,10 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     # get double precision bounds on g:
     g_a⁻, g_a⁺ = g_ival(a, c)
     g_b⁻, g_b⁺ = g_ival(b, e)
-    g⁻ = max_hi_lo(g_a⁻, g_b⁻)
-    g⁺ = min_hi_lo(g_a⁺, g_b⁺)
-    h = 0.5*(g⁻[1] + g⁺[1])
-    l = 0.5*(g⁻[2] + g⁺[2])
-    h, l = canonicalize(h, l)
+    g⁻ = Base.TwicePrecision(max_hi_lo(g_a⁻, g_b⁻)...)
+    g⁺ = Base.TwicePrecision(min_hi_lo(g_a⁺, g_b⁺)...)
+    g = 0.5*(g⁻ + g⁺)
+    h, l = g.hi, g.lo
     # check that this hits end-points and approximates step
     @assert a == fma(c, h, c*l)
     @assert s ≈  fma(d, h, d*l)
