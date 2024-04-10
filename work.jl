@@ -135,6 +135,7 @@ function Base.getindex(r::FRange, i::Int)
     x = fma(k, r.h, k*r.l)
 end
 
+# example: (a, s, b) = (0.2, 0.1, 1.1)
 # example: (a, s, b) = (-3e50, 1e50, 4e50)
 # example: (a, s, b) = (-1e20, 3.0, 2e20)
 # problem: can be made to hit zero but shouldn't!
