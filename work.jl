@@ -1,9 +1,12 @@
+using Base: TwicePrecision
+
 function tz(x::AbstractFloat)
     n, p = Base.decompose(x)
     trailing_zeros(n) + p
 end
 
 tz(n::Integer) = trailing_zeros(n)
+tz(x::TwicePrecision) = iszero(x.lo) ? tz(x.hi) : tz(x.lo)
 
 # pick value in interval with the most trailing zeros
 function simplest_float(lo::T, hi::T) where {T<:AbstractFloat}
@@ -60,64 +63,50 @@ function simplest_rational(
     return n, d
 end
 
-function ratio_p(x::AbstractFloat)
-    n, p, s = Base.decompose(x)
-    z = trailing_zeros(n)
-    n >>>= z
-    p += z
-    s*oftype(x, n), p
-end
-
-function ratio(x::AbstractFloat)
-    n, p = ratio_p(x)
-    n, exp2(p)
-end
-
-function ratio(x::T, y::T) where {T<:AbstractFloat}
-    n, p = ratio_p(x)
-    d, q = ratio_p(y)
-    p -= q
-    if p > 0
-        n = ldexp(n, p)
-    elseif p < 0
-        d = ldexp(d, -p)
-    end
-    return flipsign(n, d), abs(d)
-end
-
-function ratio_max(
-    (x_n, x_d)::Tuple{T,T},
-    (y_n, y_d)::Tuple{T,T},
-) where {T<:AbstractFloat}
-    x_n*y_d ≥ y_n*x_d ? (x_n, x_d) : (y_n, y_d)
-end
-
-function ratio_min(
-    (x_n, x_d)::Tuple{T,T},
-    (y_n, y_d)::Tuple{T,T},
-) where {T<:AbstractFloat}
-    x_n*y_d ≤ y_n*x_d ? (x_n, x_d) : (y_n, y_d)
-end
-
-function ratio_max(
-    x::Tuple{T,T},
-    y::Tuple{T,T},
-    z::Tuple{T,T},
-) where {T<:AbstractFloat}
-    ratio_max(ratio_max(x, y), z)
-end
-
-function ratio_min(
-    x::Tuple{T,T},
-    y::Tuple{T,T},
-    z::Tuple{T,T},
-) where {T<:AbstractFloat}
-    ratio_min(ratio_min(x, y), z)
-end
-
 function canonicalize(large::T, small::T) where {T<:AbstractFloat}
     h = large + small
     h, (large - h) + small
+end
+
+function g_ival(a::T, c::T) where {T<:AbstractFloat}
+    h = a/c
+    δ = fma(-c, h, a) # δ == a - c*h
+    # lower bound
+    a⁻ = prevfloat(a)
+    l⁻ = nextfloat(0.5*(δ + fma(-c, h, a⁻))/c)
+    h⁻, l⁻ = canonicalize(h, l⁻)
+    while fma(c, h⁻, c*l⁻) > a⁻
+        l⁻ = prevfloat(l⁻)
+    end
+    l⁻ = nextfloat(l⁻)
+    h⁻, l⁻ = canonicalize(h⁻, l⁻)
+    @assert fma(c, h⁻, c*l⁻) == a
+    @assert fma(c, h⁻, c*prevfloat(l⁻)) == a⁻
+    # upper bound
+    a⁺ = nextfloat(a)
+    l⁺ = prevfloat(0.5*(δ + fma(-c, h, a⁺))/c)
+    h⁺, l⁺ = canonicalize(h, l⁺)
+    while fma(c, h⁺, c*l⁺) < a⁺
+        l⁺ = nextfloat(l⁺)
+    end
+    l⁺ = prevfloat(l⁺)
+    h⁺, l⁺ = canonicalize(h⁺, l⁺)
+    @assert fma(c, h⁺, c*l⁺) == a
+    @assert fma(c, h⁺, c*nextfloat(l⁺)) == a⁺
+    # return interval
+    (h⁻, l⁻), (h⁺, l⁺)
+end
+
+function min_hi_lo(x::Tuple{T,T}, y::Tuple{T,T}) where {T<:AbstractFloat}
+    x[1] < y[1] ? x :
+    y[1] < x[1] ? y :
+    x[2] < y[2] ? x : y
+end
+
+function max_hi_lo(x::Tuple{T,T}, y::Tuple{T,T}) where {T<:AbstractFloat}
+    x[1] > y[1] ? x :
+    y[1] > x[1] ? y :
+    x[2] > y[2] ? x : y
 end
 
 function div_hi_lo(x::T, y::T) where {T<:AbstractFloat}
@@ -127,12 +116,6 @@ function div_hi_lo(x::T, y::T) where {T<:AbstractFloat}
     rh, rl = canonicalize(r, -fma(r, ys, -xs)/ys)
     ldexp(rh, xe-ye), ldexp(rl, xe-ye)
 end
-
-# example: (a, s, b) = (-3e50, 1e50, 4e50)
-# example: (a, s, b) = (-1e20, 3.0, 2e20)
-# problem: can be made to hit zero but shouldn't!
-# worse: (a, s, b) = (-1.0e17, 0.3, 2.0e18)
-# another: (a, s, b) = (-1e14, .9, 8e15)
 
 struct FRange{T<:AbstractFloat} <: AbstractRange{T}
     c::T
@@ -149,6 +132,12 @@ function Base.getindex(r::FRange, i::Int)
     k = fma(i-1, r.d, r.c)
     x = fma(k, r.h, k*r.l)
 end
+
+# example: (a, s, b) = (-3e50, 1e50, 4e50)
+# example: (a, s, b) = (-1e20, 3.0, 2e20)
+# problem: can be made to hit zero but shouldn't!
+# worse: (a, s, b) = (-1.0e17, 0.3, 2.0e18)
+# another: (a, s, b) = (-1e14, .9, 8e15)
 
 function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     a⁻, a⁺ = prevfloat(a), nextfloat(a)
@@ -197,8 +186,11 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     d = ldexp(d, -z)
     e = ldexp(e, -z)
     # have relative grid, find rational grid unit
-    g⁻ = ratio_max(ratio(a⁻, c), ratio(b⁻, e))
-    g⁺ = ratio_min(ratio(a⁺, c), ratio(b⁺, e))
+    g_a⁻, g_a⁺ = g_ival(abs(a), c)
+    g_b⁻, g_b⁺ = g_ival(abs(b), e)
+    g⁻ = max_hi_lo(g_a⁻, g_b⁻)
+    g⁺ = min_hi_lo(g_a⁺, g_b⁺)
+    # ...
     g = simplest_rational(g⁻, g⁺)
     # restore signs for endpoints
     signbit(a) && (c = -c)
