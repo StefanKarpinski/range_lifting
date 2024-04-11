@@ -1,4 +1,7 @@
-using Base: TwicePrecision
+import Base: TwicePrecision, canonicalize2
+
+# not a generally correct definition, but good enough here
+Base.isless(x::TwicePrecision, y::TwicePrecision) = x < y
 
 function tz(x::AbstractFloat)
     n, p = Base.decompose(x)
@@ -63,11 +66,6 @@ function simplest_rational(
     return n, d
 end
 
-function canonicalize(large::T, small::T) where {T<:AbstractFloat}
-    h = large + small
-    h, (large - h) + small
-end
-
 function g_ival(a::T, c::T) where {T<:AbstractFloat}
     a, c = abs(a), abs(c)
     h = a/c
@@ -75,7 +73,7 @@ function g_ival(a::T, c::T) where {T<:AbstractFloat}
     a⁻ = prevfloat(a)
     h⁻ = h + 0.5*(fma(-c, h, a) + fma(-c, h, a⁻))/c
     l⁻ = nextfloat(0.5*(fma(-c, h⁻, a) + fma(-c, h⁻, a⁻))/c)
-    @assert (h⁻, l⁻) == canonicalize(h⁻, l⁻)
+    @assert (h⁻, l⁻) == canonicalize2(h⁻, l⁻)
     @assert fma(c, h⁻, c*l⁻) > a⁻
     while fma(c, h⁻, c*l⁻) > a⁻
         l⁻ = prevfloat(l⁻)
@@ -83,11 +81,13 @@ function g_ival(a::T, c::T) where {T<:AbstractFloat}
     l⁻ = nextfloat(l⁻)
     @assert fma(c, h⁻, c*l⁻) == a
     @assert fma(c, h⁻, c*prevfloat(l⁻)) == a⁻
+    @assert (h⁻, l⁻) == canonicalize2(h⁻, l⁻)
+    g⁻ = TwicePrecision(h⁻, l⁻)
     # upper bound
     a⁺ = nextfloat(a)
     h⁺ = h + 0.5*(fma(-c, h, a) + fma(-c, h, a⁺))/c
     l⁺ = prevfloat(0.5*(fma(-c, h⁺, a) + fma(-c, h⁺, a⁺))/c)
-    @assert (h⁺, l⁺) == canonicalize(h⁺, l⁺)
+    @assert (h⁺, l⁺) == canonicalize2(h⁺, l⁺)
     @assert fma(c, h⁺, c*l⁺) < a⁺
     while fma(c, h⁺, c*l⁺) < a⁺
         l⁺ = nextfloat(l⁺)
@@ -95,45 +95,23 @@ function g_ival(a::T, c::T) where {T<:AbstractFloat}
     l⁺ = prevfloat(l⁺)
     @assert fma(c, h⁺, c*l⁺) == a
     @assert fma(c, h⁺, c*nextfloat(l⁺)) == a⁺
+    @assert (h⁺, l⁺) == canonicalize2(h⁺, l⁺)
+    g⁺ = TwicePrecision(h⁺, l⁺)
     # return interval
-    (h⁻, l⁻), (h⁺, l⁺)
-end
-
-function min_hi_lo(x::Tuple{T,T}, y::Tuple{T,T}) where {T<:AbstractFloat}
-    x[1] < y[1] ? x :
-    y[1] < x[1] ? y :
-    x[2] < y[2] ? x : y
-end
-
-function max_hi_lo(x::Tuple{T,T}, y::Tuple{T,T}) where {T<:AbstractFloat}
-    x[1] > y[1] ? x :
-    y[1] > x[1] ? y :
-    x[2] > y[2] ? x : y
-end
-
-function div_hi_lo(x::T, y::T) where {T<:AbstractFloat}
-    xs, xe = frexp(x)
-    ys, ye = frexp(y)
-    r = xs / ys
-    rh, rl = canonicalize(r, -fma(r, ys, -xs)/ys)
-    ldexp(rh, xe-ye), ldexp(rl, xe-ye)
+    g⁻, g⁺
 end
 
 struct FRange{T<:AbstractFloat} <: AbstractRange{T}
     c::T
     d::T
     n::T
-    h::T
-    l::T
+    g::TwicePrecision{T}
 end
 
 Base.length(r::FRange) = Int(r.n) + 1
-Base.step(r::FRange) = fma(r.d, r.h, r.d*r.l)
-
-function Base.getindex(r::FRange, i::Int)
-    k = fma(i-1, r.d, r.c)
-    x = fma(k, r.h, k*r.l)
-end
+Base.step(r::FRange{T}) where {T<:AbstractFloat} = T(r.d*r.g)
+Base.getindex(r::FRange{T}, i::Int) where {T<:AbstractFloat} =
+    T((TwicePrecision{T}(i-1)*r.d + r.c)*r.g)
 
 # example: (a, s, b) = (0.2, 0.1, 1.1)
 # example: (a, s, b) = (-3e50, 1e50, 4e50)
@@ -206,14 +184,13 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     # get double precision bounds on g:
     g_a⁻, g_a⁺ = g_ival(a, c)
     g_b⁻, g_b⁺ = g_ival(b, e)
-    g⁻ = Base.TwicePrecision(max_hi_lo(g_a⁻, g_b⁻)...)
-    g⁺ = Base.TwicePrecision(min_hi_lo(g_a⁺, g_b⁺)...)
+    g⁻ = max(g_a⁻, g_b⁻)
+    g⁺ = min(g_a⁺, g_b⁺)
     g = 0.5*(g⁻ + g⁺)
-    h, l = g.hi, g.lo
-    # check that this hits end-points and approximates step
-    @assert a == fma(c, h, c*l)
-    @assert s ≈  fma(d, h, d*l)
-    @assert b == fma(e, h, e*l)
+    # check: end-points hit exactly, step approximately
+    @assert T(c*g) == a
+    @assert T(d*g) ≈  s
+    @assert T(e*g) == b
     # return range object
-    FRange(c, d, n, h, l)
+    FRange(c, d, n, g)
 end
