@@ -157,9 +157,11 @@ function g_ival(a::T, c::T) where {T<:AbstractFloat}
     # lower bound (strict)
     a⁻ = prevfloat(a)
     h⁻ = h + 0.5*(fma(-c, h, a) + fma(-c, h, a⁻))/c
-    l⁻ = nextfloat(0.5*(fma(-c, h⁻, a) + fma(-c, h⁻, a⁻))/c)
+    l⁻ = 0.5*(fma(-c, h⁻, a) + fma(-c, h⁻, a⁻))/c
     @assert (h⁻, l⁻) == canonicalize2(h⁻, l⁻)
-    @assert fma(c, h⁻, c*l⁻) > a⁻
+    while fma(c, h⁻, c*l⁻) ≤ a⁻
+        l⁻ = nextfloat(l⁻)
+    end
     while fma(c, h⁻, c*l⁻) > a⁻
         l⁻ = prevfloat(l⁻)
     end
@@ -170,9 +172,11 @@ function g_ival(a::T, c::T) where {T<:AbstractFloat}
     # upper bound (strict)
     a⁺ = nextfloat(a)
     h⁺ = h + 0.5*(fma(-c, h, a) + fma(-c, h, a⁺))/c
-    l⁺ = prevfloat(0.5*(fma(-c, h⁺, a) + fma(-c, h⁺, a⁺))/c)
+    l⁺ = 0.5*(fma(-c, h⁺, a) + fma(-c, h⁺, a⁺))/c
     @assert (h⁺, l⁺) == canonicalize2(h⁺, l⁺)
-    @assert fma(c, h⁺, c*l⁺) < a⁺
+    while fma(c, h⁺, c*l⁺) ≥ a⁺
+        l⁺ = prevfloat(l⁺)
+    end
     while fma(c, h⁺, c*l⁺) < a⁺
         l⁺ = nextfloat(l⁺)
     end
@@ -263,6 +267,7 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     lo_b, hi_b = g_ival(b, e)
     lo = max(lo_a, lo_s, lo_b)
     hi = min(hi_a, hi_s, hi_b)
+    @assert lo < hi # otherwise can't work
     num, den = simplest_rational(lo, hi)
     g = num/den
     @assert lo < g < hi
@@ -284,3 +289,6 @@ end
 # example: (a, s, b) = (1/10 + pi, 2/10, 19/10 + pi)
 # - this works but makes range_ratios really slow
 # - need faster approach than linear scanning
+# example: (a, s, b) = (1/10 + x, 2/10, 19/10 + x)
+# - with x = 0.6367464963941911
+# - lo < hi fails, may need higher precision range_ratios
