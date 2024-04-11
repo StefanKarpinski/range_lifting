@@ -259,15 +259,16 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     #  - g = s/d = a/c = b/e
     # get double precision bounds on g:
     lo_a, hi_a = g_ival(a, c)
+    lo_s, hi_s = g_ival(s, d)
     lo_b, hi_b = g_ival(b, e)
-    lo = max(lo_a, lo_b)
-    hi = min(hi_a, hi_b)
+    lo = max(lo_a, lo_s, lo_b)
+    hi = min(hi_a, hi_s, hi_b)
     num, den = simplest_rational(lo, hi)
     g = num/den
     @assert lo < g < hi
-    # check: end-points hit exactly, step approximately
+    # check that inputs are hit
     @assert T(c*g) == a
-    @assert T(d*g) ≈  s
+    @assert T(d*g) == s
     @assert T(e*g) == b
     # return range object
     FRange(c, d, n, g)
@@ -279,3 +280,7 @@ end
 # example: (a, s, b) = (-1e20, 3.0, 2e20)
 # worse: (a, s, b) = (-1.0e17, 0.3, 2.0e18)
 # another: (a, s, b) = (-1e14, .9, 8e15)
+
+# example: (a, s, b) = (1/10 + pi, 2/10, 19/10 + pi)
+# - this works but makes range_ratios really slow
+# - need faster approach than linear scanning
