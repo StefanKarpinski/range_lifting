@@ -151,41 +151,48 @@ function simplest_rational(
     return n, d
 end
 
-function g_ival(a::T, c::T) where {T<:AbstractFloat}
-    a, c = abs(a), abs(c)
-    h = a/c
+"""
+    ratio_ival(x::T, y::T) where {T<:AbstractFloat}
+
+Returns a pair of `TwicePrecision` values, `(r⁻, r⁺)`, which bound the region
+the ratio `x/y` could be, in the sense that they are the tightest values such
+that `y*r⁻ == prevfloat(x)` and `y*r⁺ == nextfloat(x)`.
+"""
+function ratio_ival(x::T, y::T) where {T<:AbstractFloat}
+    x, y = abs(x), abs(y)
+    h = x/y
     # lower bound (strict)
-    a⁻ = prevfloat(a)
-    h⁻ = h + 0.5*(fma(-c, h, a) + fma(-c, h, a⁻))/c
-    l⁻ = 0.5*(fma(-c, h⁻, a) + fma(-c, h⁻, a⁻))/c
+    x⁻ = prevfloat(x)
+    h⁻ = h + 0.5*(fma(-y, h, x) + fma(-y, h, x⁻))/y
+    l⁻ = 0.5*(fma(-y, h⁻, x) + fma(-y, h⁻, x⁻))/y
     @assert (h⁻, l⁻) == canonicalize2(h⁻, l⁻)
-    while fma(c, h⁻, c*l⁻) ≤ a⁻
+    while fma(y, h⁻, y*l⁻) ≤ x⁻
         l⁻ = nextfloat(l⁻)
     end
-    while fma(c, h⁻, c*l⁻) > a⁻
+    while fma(y, h⁻, y*l⁻) > x⁻
         l⁻ = prevfloat(l⁻)
     end
     h⁻, l⁻ == canonicalize2(h⁻, l⁻)
-    @assert fma(c, h⁻, c*nextfloat(l⁻)) == a
-    @assert fma(c, h⁻, c*l⁻) == a⁻
-    g⁻ = TwicePrecision(h⁻, l⁻)
+    @assert fma(y, h⁻, y*nextfloat(l⁻)) == x
+    @assert fma(y, h⁻, y*l⁻) == x⁻
+    r⁻ = TwicePrecision(h⁻, l⁻)
     # upper bound (strict)
-    a⁺ = nextfloat(a)
-    h⁺ = h + 0.5*(fma(-c, h, a) + fma(-c, h, a⁺))/c
-    l⁺ = 0.5*(fma(-c, h⁺, a) + fma(-c, h⁺, a⁺))/c
+    x⁺ = nextfloat(x)
+    h⁺ = h + 0.5*(fma(-y, h, x) + fma(-y, h, x⁺))/y
+    l⁺ = 0.5*(fma(-y, h⁺, x) + fma(-y, h⁺, x⁺))/y
     @assert (h⁺, l⁺) == canonicalize2(h⁺, l⁺)
-    while fma(c, h⁺, c*l⁺) ≥ a⁺
+    while fma(y, h⁺, y*l⁺) ≥ x⁺
         l⁺ = prevfloat(l⁺)
     end
-    while fma(c, h⁺, c*l⁺) < a⁺
+    while fma(y, h⁺, y*l⁺) < x⁺
         l⁺ = nextfloat(l⁺)
     end
     h⁺, l⁺ == canonicalize2(h⁺, l⁺)
-    @assert fma(c, h⁺, c*prevfloat(l⁺)) == a
-    @assert fma(c, h⁺, c*l⁺) == a⁺
-    g⁺ = TwicePrecision(h⁺, l⁺)
+    @assert fma(y, h⁺, y*prevfloat(l⁺)) == x
+    @assert fma(y, h⁺, y*l⁺) == x⁺
+    r⁺ = TwicePrecision(h⁺, l⁺)
     # return interval (exclusive)
-    g⁻, g⁺
+    r⁻, r⁺
 end
 
 struct FRange{T<:AbstractFloat} <: AbstractRange{T}
@@ -262,9 +269,9 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     # still need rational value g:
     #  - g = s/d = a/c = b/e
     # get double precision bounds on g:
-    lo_a, hi_a = g_ival(a, c)
-    lo_s, hi_s = g_ival(s, d)
-    lo_b, hi_b = g_ival(b, e)
+    lo_a, hi_a = ratio_ival(a, c)
+    lo_s, hi_s = ratio_ival(s, d)
+    lo_b, hi_b = ratio_ival(b, e)
     lo = max(lo_a, lo_s, lo_b)
     hi = min(hi_a, hi_s, hi_b)
     @assert lo < hi # otherwise can't work
