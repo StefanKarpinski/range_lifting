@@ -1,9 +1,44 @@
-import Base: TwicePrecision, canonicalize2
+import Base: TwicePrecision, canonicalize2, div12
 
 # not a generally correct definition, but good enough here
 Base.isless(x::TwicePrecision, y::TwicePrecision) = x < y
+Base.zero(x::TwicePrecision) = typeof(x)(zero(x.hi))
+Base.one(x::TwicePrecision) = typeof(x)(one(x.hi))
 
-function tz(x::AbstractFloat)
+function Base.round(
+    x::TwicePrecision{<:AbstractFloat},
+    R::RoundingMode{mode} = RoundNearest,
+) where {mode}
+    if eps(x.hi) ≥ 1
+        flip = mode in (:ToZero, :FromZero) && x.hi*x.lo < 0
+        r_lo = flip ? -round(-x.lo, R) : round(x.lo, R)
+        return TwicePrecision(x.hi, r_lo)
+    else
+        next = nextfloat(x.hi, Int(sign(x.lo)))
+        this = round(x.hi, R)
+        that = round(next, R)
+        this == that && return TwicePrecision(this)
+        edge = mode in (:ToZero, :FromZero, :Up, :Down) ? 0.0 : 0.5
+        frac = abs(x.hi - this)
+        return TwicePrecision(frac == edge ? that : this)
+    end
+end
+
+function Base.div(
+    a::TwicePrecision{T},
+    b::TwicePrecision{T},
+    R::RoundingMode,
+) where {T}
+    round(a/b, R)
+end
+
+Base.nextfloat(x::TwicePrecision) =
+    TwicePrecision(canonicalize2(x.hi, nextfloat(x.lo))...)
+Base.prevfloat(x::TwicePrecision) =
+    TWicePrecision(canonicalize2(x.hi, prevfloat(x.lo))...)
+
+function tz(x::T) where {T<:AbstractFloat}
+    iszero(x) && return typemax(Int)
     n, p = Base.decompose(x)
     trailing_zeros(n) + p
 end
@@ -26,12 +61,42 @@ function simplest_float(lo::T, hi::T) where {T<:AbstractFloat}
     return m
 end
 
+function simplest_float(
+    lo :: TwicePrecision{T},
+    hi :: TwicePrecision{T},
+) where {T<:AbstractFloat}
+    lo.hi == hi.hi &&
+        return TwicePrecision(lo.hi, simplest_float(lo.lo, hi.lo))
+    @assert lo.hi < hi.hi
+    l = lo.lo ≤ 0 ? lo.hi : nextfloat(lo.hi)
+    h = hi.lo ≥ 0 ? hi.hi : prevfloat(hi.hi)
+    l ≤ h && return TwicePrecision(simplest_float(l, h))
+    @assert 0 < lo.lo && hi.lo < 0
+    h = hi - lo.hi
+    @assert iszero(h.lo)
+    m = simplest_float(lo.lo, h.hi)
+    return TwicePrecision(canonicalize2(lo.hi, m)...)
+end
+
+function ratio(x::TwicePrecision{T}) where {T<:AbstractFloat}
+    p = min(0, tz(x))
+    n = TwicePrecision(ldexp(x.hi, -p), ldexp(x.lo, -p))
+    d = TwicePrecision(exp2(-p))
+    return n, d
+end
+
+# based on https://stackoverflow.com/a/65189151/659248
 function simplest_rational_core(
-    (s, t)::Tuple{T,T},
-    (u, v)::Tuple{T,T},
-) where {T<:Real}
-    𝟘 = zero(T)
-    𝟙 = one(T)
+    lo :: TwicePrecision{T},
+    hi :: TwicePrecision{T},
+) where {T<:AbstractFloat}
+    𝟘 = zero(lo)
+    𝟙 = one(lo)
+
+    @assert 𝟘 < lo < hi
+
+    s, t = ratio(lo)
+    u, v = ratio(hi)
 
     a = d = 𝟙
     b = c = 𝟘
@@ -47,29 +112,49 @@ function simplest_rational_core(
 end
 
 function simplest_rational(
-    (s, t)::Tuple{T,T},
-    (u, v)::Tuple{T,T},
-) where {T<:Real}
-    n, d = simplest_rational_core((s, t), (u, v))
-    # lower bound for n
-    n⁻ = prevfloat(cld(d*s, t))
-    while n⁻ < n && n⁻*t < d*s # n⁻/d < s/t
+    lo :: TwicePrecision{T},
+    hi :: TwicePrecision{T},
+) where {T<:AbstractFloat}
+    𝟘 = zero(lo)
+    𝟙 = one(lo)
+
+    # reduce to positive case
+    if hi < 𝟘
+        n, d = simplest_rational(-hi, -lo)
+        return -n, d
+    end
+    lo ≤ 𝟘 && return 0, 𝟙
+
+    # if there are integers, return the simplest one
+    if round(lo, RoundUp) ≤ round(hi, RoundDown)
+        return simplest_float(lo, hi), 𝟙
+    end
+
+    # find strictly minimal solution
+    n, d = simplest_rational_core(lo, hi)
+
+    return n, d
+
+    # find numerator bounds: d*lo < n < d*hi
+    n⁻ = round(d*lo, RoundUp)
+    while n⁻ < n && n⁻/d ≤ lo
         n⁻ = nextfloat(n⁻)
     end
-    # upper bound for n
-    n⁺ = nextfloat(fld(d*u, v))
-    while n < n⁺ && n⁺*v > d*u # u/v < n⁺/d
-        n⁺ = prevfloat(n⁺)
+    n⁺ = round(d*hi, RoundDown)
+    while n⁺ > n && hi ≤ n⁺/d
+        n⁻ = prevfloat(n⁻)
     end
-    # simplify n
+
+    # pick simplest numerator
     n = simplest_float(n⁻, n⁺)
+
     return n, d
 end
 
 function g_ival(a::T, c::T) where {T<:AbstractFloat}
     a, c = abs(a), abs(c)
     h = a/c
-    # lower bound
+    # lower bound (strict)
     a⁻ = prevfloat(a)
     h⁻ = h + 0.5*(fma(-c, h, a) + fma(-c, h, a⁻))/c
     l⁻ = nextfloat(0.5*(fma(-c, h⁻, a) + fma(-c, h⁻, a⁻))/c)
@@ -78,12 +163,11 @@ function g_ival(a::T, c::T) where {T<:AbstractFloat}
     while fma(c, h⁻, c*l⁻) > a⁻
         l⁻ = prevfloat(l⁻)
     end
-    l⁻ = nextfloat(l⁻)
-    @assert fma(c, h⁻, c*l⁻) == a
-    @assert fma(c, h⁻, c*prevfloat(l⁻)) == a⁻
-    @assert (h⁻, l⁻) == canonicalize2(h⁻, l⁻)
+    h⁻, l⁻ == canonicalize2(h⁻, l⁻)
+    @assert fma(c, h⁻, c*nextfloat(l⁻)) == a
+    @assert fma(c, h⁻, c*l⁻) == a⁻
     g⁻ = TwicePrecision(h⁻, l⁻)
-    # upper bound
+    # upper bound (strict)
     a⁺ = nextfloat(a)
     h⁺ = h + 0.5*(fma(-c, h, a) + fma(-c, h, a⁺))/c
     l⁺ = prevfloat(0.5*(fma(-c, h⁺, a) + fma(-c, h⁺, a⁺))/c)
@@ -92,12 +176,11 @@ function g_ival(a::T, c::T) where {T<:AbstractFloat}
     while fma(c, h⁺, c*l⁺) < a⁺
         l⁺ = nextfloat(l⁺)
     end
-    l⁺ = prevfloat(l⁺)
-    @assert fma(c, h⁺, c*l⁺) == a
-    @assert fma(c, h⁺, c*nextfloat(l⁺)) == a⁺
-    @assert (h⁺, l⁺) == canonicalize2(h⁺, l⁺)
+    h⁺, l⁺ == canonicalize2(h⁺, l⁺)
+    @assert fma(c, h⁺, c*prevfloat(l⁺)) == a
+    @assert fma(c, h⁺, c*l⁺) == a⁺
     g⁺ = TwicePrecision(h⁺, l⁺)
-    # return interval
+    # return interval (exclusive)
     g⁻, g⁺
 end
 
@@ -110,15 +193,8 @@ end
 
 Base.length(r::FRange) = Int(r.n) + 1
 Base.step(r::FRange{T}) where {T<:AbstractFloat} = T(r.d*r.g)
-Base.getindex(r::FRange{T}, i::Int) where {T<:AbstractFloat} =
+Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
     T((TwicePrecision{T}(i-1)*r.d + r.c)*r.g)
-
-# example: (a, s, b) = (0.2, 0.1, 1.1)
-# example: (a, s, b) = (-3e50, 1e50, 4e50)
-# example: (a, s, b) = (-1e20, 3.0, 2e20)
-# problem: can be made to hit zero but shouldn't!
-# worse: (a, s, b) = (-1.0e17, 0.3, 2.0e18)
-# another: (a, s, b) = (-1e14, .9, 8e15)
 
 function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     a⁻, a⁺ = prevfloat(a), nextfloat(a)
@@ -182,11 +258,13 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     # still need rational value g:
     #  - g = s/d = a/c = b/e
     # get double precision bounds on g:
-    g_a⁻, g_a⁺ = g_ival(a, c)
-    g_b⁻, g_b⁺ = g_ival(b, e)
-    g⁻ = max(g_a⁻, g_b⁻)
-    g⁺ = min(g_a⁺, g_b⁺)
-    g = 0.5*(g⁻ + g⁺)
+    lo_a, hi_a = g_ival(a, c)
+    lo_b, hi_b = g_ival(b, e)
+    lo = max(lo_a, lo_b)
+    hi = min(hi_a, hi_b)
+    num, den = simplest_rational(lo, hi)
+    g = num/den
+    @assert lo < g < hi
     # check: end-points hit exactly, step approximately
     @assert T(c*g) == a
     @assert T(d*g) ≈  s
@@ -194,3 +272,10 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     # return range object
     FRange(c, d, n, g)
 end
+
+# example: (a, s, b) = (0.2, 0.1, 1.1)
+# example: (a, s, b) = (-3e50, 1e50, 4e50)
+# problem: can be made to hit zero but shouldn't!
+# example: (a, s, b) = (-1e20, 3.0, 2e20)
+# worse: (a, s, b) = (-1.0e17, 0.3, 2.0e18)
+# another: (a, s, b) = (-1e14, .9, 8e15)
