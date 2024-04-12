@@ -143,21 +143,19 @@ function simplest_rational(
 end
 
 """
-    ratio_break⁺(x⁻, y) -> r
+    ratio_break⁺(x, y) -> r
 
 Return a `TwicePrecision` value `r` such that:
 
-    - `T(y*prevfloat(r)) == x⁻`
-    - `T(y*nextfloat(r)) == x⁺`
-
-where `x⁺ = nextfloat(x⁻)`.
+    - `T(y*prevfloat(r)) == x`
+    - `T(y*nextfloat(r)) != x`
 """
-function ratio_break⁺(x⁻::T, y::T) where {T<:AbstractFloat}
-    x⁺ = nextfloat(x⁻)
+function ratio_break⁺(x::T, y::T) where {T<:AbstractFloat}
+    x⁻ = x
     if signbit(y)
-        x⁻, x⁺ = -x⁺, -x⁻
-        y = -y
+        x⁻, y = -x⁻, -y
     end
+    x⁺ = nextfloat(x⁻)
     h = 0.5*(x⁻/y + x⁺/y)
     l = 0.5*(fma(-y, h, x⁻) + fma(-y, h, x⁺))/y
     while true
@@ -172,9 +170,8 @@ function ratio_break⁺(x⁻::T, y::T) where {T<:AbstractFloat}
             end
             l = nextfloat(l)
         end
-        h′, l′ = canonicalize2(h, l)
-        h == h′ && l == l′ && break
-        h, l = h′, l′
+        h + l == h && break # canonical
+        h, l = canonicalize2(h, l)
     end
     @assert (h, l) == canonicalize2(h, l)
     @assert fma(y, h, y*prevfloat(l)) == x⁻
@@ -183,27 +180,27 @@ function ratio_break⁺(x⁻::T, y::T) where {T<:AbstractFloat}
 end
 
 """
-    ratio_break⁻(x⁺, y) -> r
+    ratio_break⁻(x, y) -> r
 
 Return a `TwicePrecision` value `r` such that:
 
-    - `T(y*prevfloat(r)) == x⁻`
-    - `T(y*prevfloat(r)) == (x⁻ + x⁺)/2`
-    - `T(y*prevfloat(r)) == x⁺`
-
-where `x⁻ = prevfloat(x⁺)`.
+    - `T(y*prevfloat(r)) != x`
+    - `T(y*nextfloat(r)) == x`
 """
-function ratio_break⁻(x⁺::T, y::T) where {T<:AbstractFloat}
-    ratio_break⁺(prevfloat(x⁺), y)
+function ratio_break⁻(x::T, y::T) where {T<:AbstractFloat}
+    if signbit(y)
+        x, y = -x, -y
+    end
+    ratio_break⁺(prevfloat(x), y)
 end
 
 """
     ratio_ival(x, y)
 
-Shorthand for `minmax(ratio_break⁻(x, y), ratio_break⁺(x, y))`.
+Shorthand for `ratio_break⁻(x, y), ratio_break⁺(x, y)`.
 """
 function ratio_ival(x::T, y::T) where {T<:AbstractFloat}
-    minmax(ratio_break⁻(x, y), ratio_break⁺(x, y))
+    ratio_break⁻(x, y), ratio_break⁺(x, y)
 end
 
 struct FRange{T<:AbstractFloat} <: AbstractRange{T}
