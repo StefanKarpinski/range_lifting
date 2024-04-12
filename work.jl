@@ -229,14 +229,20 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     c = d = e = zero(T)
     while true
         d += one(T)
-        c = simplest_float(T(d*aₛ⁻), T(d*aₛ⁺))
-        tz(c) ≥ p || continue
-        e = simplest_float(T(d*bₛ⁻), T(d*bₛ⁺))
-        tz(e) ≥ p || continue
+        c⁻ = round(ldexp(T(d*aₛ⁻), -p), RoundUp)
+        c⁺ = round(ldexp(T(d*aₛ⁺), -p), RoundDown)
+        c⁻ ≤ c⁺ || continue
+        e⁻ = round(ldexp(T(d*bₛ⁻), -p), RoundUp)
+        e⁺ = round(ldexp(T(d*bₛ⁺), -p), RoundDown)
+        e⁻ ≤ e⁺ || continue
+        c = ldexp(simplest_float(c⁻, c⁺), p)
+        e = ldexp(simplest_float(e⁻, e⁺), p)
         break
     end
     # eliminate common powers of two
-    t = exp2(-min(tz(c), tz(d), tz(e)))
+    z = min(tz(c), tz(d), tz(e))
+    @assert z ≥ p
+    t = exp2(-z)
     c *= t; d *= t; e *= t
     # return values
     n, c, d, e
