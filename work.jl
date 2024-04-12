@@ -215,54 +215,29 @@ Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
     T((TwicePrecision{T}(i-1)*r.d + r.c)*r.g)
 
 function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
-    a⁻, a⁺ = prevfloat(a), nextfloat(a)
-    b⁻, b⁺ = prevfloat(b), nextfloat(b)
-    s⁻, s⁺ = prevfloat(s), nextfloat(s)
-    if signbit(s)
-        s⁻, s⁺ = s⁺, s⁻
-    end
-    n⁻ = cld(b⁻ - a⁺, s⁺)
-    n⁺ = fld(b⁺ - a⁻, s⁻)
-    @assert n⁻ ≤ n⁺ # otherwise can't hit endpoint
-    n = simplest_float(n⁻, n⁺)
+    # compute the length first
+    ϵ = max(eps(a), eps(b))
+    n⁻ = ratio_break⁻((b - a) - ϵ, s)
+    n⁺ = ratio_break⁺((b - a) + ϵ, s)
+    n = T(simplest_float(n⁻, n⁺))
+    # check if end-point can be hit:
     p = tz(n)
-    # make everything non-negative
-    if signbit(a)
-        a⁻, a⁺ = -a⁺, -a⁻
-    end
-    if signbit(s)
-        s⁻, s⁺ = -s⁻, -s⁺
-    end
-    if signbit(b)
-        b⁻, b⁺ = -b⁺, -b⁻
-    end
+    p ≥ 0 || error("end-point can't be hit")
     # find best grid divisor
+    aₛ⁻, aₛ⁺ = ratio_ival(a, s)
+    bₛ⁻, bₛ⁺ = ratio_ival(b, s)
     c = d = e = zero(T)
     while true
         d += one(T)
-        # find simplest c
-        c⁻ = cld(d*a⁻, s⁺)
-        c⁺ = fld(d*a⁺, s⁻)
-        c⁻ ≤ c⁺ || continue
-        c = simplest_float(c⁻, c⁺)
+        c = simplest_float(T(d*aₛ⁻), T(d*aₛ⁺))
         tz(c) ≥ p || continue
-        # find simplest e
-        e⁻ = cld(d*b⁻, s⁺)
-        e⁺ = fld(d*b⁺, s⁻)
-        e⁻ ≤ e⁺ || continue
-        e = simplest_float(e⁻, e⁺)
+        e = simplest_float(T(d*bₛ⁻), T(d*bₛ⁺))
         tz(e) ≥ p || continue
-        # found good c & e
         break
     end
-    # eliminated common powers of two
-    z = min(tz(c), tz(d), tz(e))
-    c = ldexp(c, -z)
-    d = ldexp(d, -z)
-    e = ldexp(e, -z)
-    # restore signs for endpoints
-    signbit(a) && (c = -c)
-    signbit(b) && (e = -e)
+    # eliminate common powers of two
+    t = exp2(-min(tz(c), tz(d), tz(e)))
+    c *= t; d *= t; e *= t
     # return values
     n, c, d, e
 end
