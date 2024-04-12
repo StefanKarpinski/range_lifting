@@ -85,7 +85,7 @@ function ratio(x::TwicePrecision{T}) where {T<:AbstractFloat}
     return n, d
 end
 
-# based on https://stackoverflow.com/a/65189151/659248
+# based on https://stackoverflow.com/a/65189151/659248 (inclusive version)
 function simplest_rational_core(
     lo :: TwicePrecision{T},
     hi :: TwicePrecision{T},
@@ -93,7 +93,7 @@ function simplest_rational_core(
     𝟘 = zero(lo)
     𝟙 = one(lo)
 
-    @assert 𝟘 < lo < hi
+    @assert 𝟘 < lo ≤ hi
 
     s, t = ratio(lo)
     u, v = ratio(hi)
@@ -102,10 +102,10 @@ function simplest_rational_core(
     b = c = 𝟘
 
     while true
-        q = s ÷ t
+        q = (s - 𝟙) ÷ t
         s, t, u, v = v, u-q*v, t, s-q*t
         a, b, c, d = b+q*a, a, d+q*c, c
-        s < t && break
+        s ≤ t && break
     end
 
     return a + b, c + d
@@ -133,67 +133,67 @@ function simplest_rational(
     # find strictly minimal solution
     n, d = simplest_rational_core(lo, hi)
 
-    return n, d
+    # simplify numerator and denominator
+    n = simplest_float(d*lo, d*hi)
+    d = simplest_float(n/hi, n/lo)
 
-    # find numerator bounds: d*lo < n < d*hi
-    n⁻ = round(d*lo, RoundUp)
-    while n⁻ < n && n⁻/d ≤ lo
-        n⁻ = nextfloat(n⁻)
-    end
-    n⁺ = round(d*hi, RoundDown)
-    while n⁺ > n && hi ≤ n⁺/d
-        n⁻ = prevfloat(n⁻)
-    end
-
-    # pick simplest numerator
-    n = simplest_float(n⁻, n⁺)
-
+    # check we're in the interval
+    @assert lo ≤ n/d ≤ hi
     return n, d
 end
 
 """
-    ratio_ival(x::T, y::T) where {T<:AbstractFloat}
+    ratio_ival((x⁻, x⁺), y)
+    ratio_ival(x, y)
 
 Returns a pair of `TwicePrecision` values, `(r⁻, r⁺)`, which bound the region
 the ratio `x/y` could be, in the sense that they are the tightest values such
-that `y*r⁻ == prevfloat(x)` and `y*r⁺ == nextfloat(x)`.
+that `y*r⁻ == x⁻` and `y*r⁺ == x⁺`. When only a single `x` value is given
+then `x⁻ = prevfloat(x)` and `x⁺ = nextfloat(x)` are used.
 """
-function ratio_ival(x::T, y::T) where {T<:AbstractFloat}
-    x, y = abs(x), abs(y)
-    h = x/y
-    # lower bound (strict)
-    x⁻ = prevfloat(x)
-    h⁻ = h + 0.5*(fma(-y, h, x) + fma(-y, h, x⁻))/y
-    l⁻ = 0.5*(fma(-y, h⁻, x) + fma(-y, h⁻, x⁻))/y
-    @assert (h⁻, l⁻) == canonicalize2(h⁻, l⁻)
-    while fma(y, h⁻, y*l⁻) ≤ x⁻
-        l⁻ = nextfloat(l⁻)
+function ratio_ival((x⁻, x⁺)::Tuple{T,T}, y::T) where {T<:AbstractFloat}
+    if signbit(y)
+        x⁻, x⁺ = -x⁺, -x⁻
+        y = -y
     end
+    @assert nextfloat(x⁻) ≤ prevfloat(x⁺)
+    # lower bound (strict)
+    x = nextfloat(x⁻)
+    h⁻ = x⁻/y
+    h⁻ = h⁻ + 0.5*(fma(-y, h⁻, x) + fma(-y, h⁻, x⁻))/y
+    l⁻ = 0.5*(fma(-y, h⁻, x) + fma(-y, h⁻, x⁻))/y
     while fma(y, h⁻, y*l⁻) > x⁻
         l⁻ = prevfloat(l⁻)
     end
-    h⁻, l⁻ == canonicalize2(h⁻, l⁻)
-    @assert fma(y, h⁻, y*nextfloat(l⁻)) == x
-    @assert fma(y, h⁻, y*l⁻) == x⁻
+    while fma(y, h⁻, y*l⁻) ≤ x⁻
+        l⁻ = nextfloat(l⁻)
+    end
+    @assert fma(y, h⁻, y*l⁻) == x
+    @assert fma(y, h⁻, y*prevfloat(l⁻)) == x⁻
+    @assert (h⁻, l⁻) == canonicalize2(h⁻, l⁻)
     r⁻ = TwicePrecision(h⁻, l⁻)
     # upper bound (strict)
-    x⁺ = nextfloat(x)
-    h⁺ = h + 0.5*(fma(-y, h, x) + fma(-y, h, x⁺))/y
+    x = prevfloat(x⁺)
+    h⁺ = x⁺/y
+    h⁺ = h⁺ + 0.5*(fma(-y, h⁺, x) + fma(-y, h⁺, x⁺))/y
     l⁺ = 0.5*(fma(-y, h⁺, x) + fma(-y, h⁺, x⁺))/y
-    @assert (h⁺, l⁺) == canonicalize2(h⁺, l⁺)
-    while fma(y, h⁺, y*l⁺) ≥ x⁺
-        l⁺ = prevfloat(l⁺)
-    end
     while fma(y, h⁺, y*l⁺) < x⁺
         l⁺ = nextfloat(l⁺)
     end
-    h⁺, l⁺ == canonicalize2(h⁺, l⁺)
-    @assert fma(y, h⁺, y*prevfloat(l⁺)) == x
-    @assert fma(y, h⁺, y*l⁺) == x⁺
+    while fma(y, h⁺, y*l⁺) ≥ x⁺
+        l⁺ = prevfloat(l⁺)
+    end
+    @assert fma(y, h⁺, y*l⁺) == x
+    @assert fma(y, h⁺, y*nextfloat(l⁺)) == x⁺
+    @assert (h⁺, l⁺) == canonicalize2(h⁺, l⁺)
     r⁺ = TwicePrecision(h⁺, l⁺)
     # return interval (exclusive)
+    @assert r⁻ < r⁺
     r⁻, r⁺
 end
+
+ratio_ival(x::T, y::T) where {T<:AbstractFloat} =
+    ratio_ival((prevfloat(x), nextfloat(x)), y)
 
 struct FRange{T<:AbstractFloat} <: AbstractRange{T}
     c::T
@@ -277,7 +277,7 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     @assert lo < hi # otherwise can't work
     num, den = simplest_rational(lo, hi)
     g = num/den
-    @assert lo < g < hi
+    @assert lo ≤ g ≤ hi
     # check that inputs are hit
     @assert T(c*g) == a
     @assert T(d*g) == s

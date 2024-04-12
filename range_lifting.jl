@@ -66,8 +66,8 @@ function pick_max_tz(V::Interval{F}) where {F<:AbstractFloat}
 end
 
 function ratio(x::TwicePrecision{<:AbstractFloat})
-    d = inv(iszero(x.lo) ? eps(x.hi) : eps(x.lo))
-    return x*d, TwicePrecision(d)
+    e = iszero(x.lo) ? eps(x.hi) : eps(x.lo)
+    return x/e, TwicePrecision(d)
 end
 
 # exact modulus of an integer-valued TwicePrecision 
