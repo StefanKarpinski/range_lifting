@@ -74,10 +74,7 @@ function simplest_float(
     h = hi.lo ≥ 0 ? hi.hi : prevfloat(hi.hi)
     l ≤ h && return TwicePrecision(simplest_float(l, h))
     @assert 0 < lo.lo && hi.lo < 0
-    h = hi - lo.hi
-    @assert iszero(h.lo)
-    m = simplest_float(lo.lo, h.hi)
-    return TwicePrecision(canonicalize2(lo.hi, m)...)
+    lo.hi + simplest_float(TwicePrecision(lo.lo), hi - lo.hi)
 end
 
 function ratio(x::TwicePrecision{T}) where {T<:AbstractFloat}
