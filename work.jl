@@ -5,6 +5,8 @@ Base.isless(x::TwicePrecision, y::TwicePrecision) = x < y
 Base.zero(x::TwicePrecision) = typeof(x)(zero(x.hi))
 Base.one(x::TwicePrecision) = typeof(x)(one(x.hi))
 
+Base.isinteger(x::TwicePrecision) = isinteger(x.hi) & isinteger(x.lo)
+
 function Base.round(
     x::TwicePrecision{<:AbstractFloat},
     R::RoundingMode{mode} = RoundNearest,
