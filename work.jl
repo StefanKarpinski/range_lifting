@@ -32,10 +32,10 @@ function Base.div(
     round(a/b, R)
 end
 
-Base.nextfloat(x::TwicePrecision) =
-    TwicePrecision(canonicalize2(x.hi, nextfloat(x.lo))...)
-Base.prevfloat(x::TwicePrecision) =
-    TWicePrecision(canonicalize2(x.hi, prevfloat(x.lo))...)
+Base.nextfloat(x::TwicePrecision, k::Integer=1) =
+    TwicePrecision(canonicalize2(x.hi, nextfloat(x.lo, k))...)
+Base.prevfloat(x::TwicePrecision, k::Integer=1) =
+    TwicePrecision(canonicalize2(x.hi, prevfloat(x.lo, k))...)
 
 function tz(x::T) where {T<:AbstractFloat}
     iszero(x) && return typemax(Int)
@@ -143,57 +143,68 @@ function simplest_rational(
 end
 
 """
-    ratio_ival((x⁻, x⁺), y)
-    ratio_ival(x, y)
+    ratio_break⁺(x⁻, y) -> r
 
-Returns a pair of `TwicePrecision` values, `(r⁻, r⁺)`, which bound the region
-the ratio `x/y` could be, in the sense that they are the tightest values such
-that `y*r⁻ == x⁻` and `y*r⁺ == x⁺`. When only a single `x` value is given
-then `x⁻ = prevfloat(x)` and `x⁺ = nextfloat(x)` are used.
+Return a `TwicePrecision` value `r` such that:
+
+    - `T(y*prevfloat(r)) == x⁻`
+    - `T(y*nextfloat(r)) == x⁺`
+
+where `x⁺ = nextfloat(x⁻)`.
 """
-function ratio_ival((x⁻, x⁺)::Tuple{T,T}, y::T) where {T<:AbstractFloat}
+function ratio_break⁺(x⁻::T, y::T) where {T<:AbstractFloat}
+    x⁺ = nextfloat(x⁻)
     if signbit(y)
         x⁻, x⁺ = -x⁺, -x⁻
         y = -y
     end
-    @assert nextfloat(x⁻) ≤ prevfloat(x⁺)
-    # lower bound (strict)
-    x = nextfloat(x⁻)
-    h⁻ = x⁻/y
-    h⁻ = h⁻ + 0.5*(fma(-y, h⁻, x) + fma(-y, h⁻, x⁻))/y
-    l⁻ = 0.5*(fma(-y, h⁻, x) + fma(-y, h⁻, x⁻))/y
-    while fma(y, h⁻, y*l⁻) > x⁻
-        l⁻ = prevfloat(l⁻)
+    h = 0.5*(x⁻/y + x⁺/y)
+    l = 0.5*(fma(-y, h, x⁻) + fma(-y, h, x⁺))/y
+    while true
+        if fma(y, h, y*l) ≤ x⁻
+            while fma(y, h, y*l) ≤ x⁻
+                l = nextfloat(l)
+            end
+            l = prevfloat(l)
+        else
+            while fma(y, h, y*l) ≥ x⁺
+                l = prevfloat(l)
+            end
+            l = nextfloat(l)
+        end
+        h′, l′ = canonicalize2(h, l)
+        h == h′ && l == l′ && break
+        h, l = h′, l′
     end
-    while fma(y, h⁻, y*l⁻) ≤ x⁻
-        l⁻ = nextfloat(l⁻)
-    end
-    @assert fma(y, h⁻, y*l⁻) == x
-    @assert fma(y, h⁻, y*prevfloat(l⁻)) == x⁻
-    @assert (h⁻, l⁻) == canonicalize2(h⁻, l⁻)
-    r⁻ = TwicePrecision(h⁻, l⁻)
-    # upper bound (strict)
-    x = prevfloat(x⁺)
-    h⁺ = x⁺/y
-    h⁺ = h⁺ + 0.5*(fma(-y, h⁺, x) + fma(-y, h⁺, x⁺))/y
-    l⁺ = 0.5*(fma(-y, h⁺, x) + fma(-y, h⁺, x⁺))/y
-    while fma(y, h⁺, y*l⁺) < x⁺
-        l⁺ = nextfloat(l⁺)
-    end
-    while fma(y, h⁺, y*l⁺) ≥ x⁺
-        l⁺ = prevfloat(l⁺)
-    end
-    @assert fma(y, h⁺, y*l⁺) == x
-    @assert fma(y, h⁺, y*nextfloat(l⁺)) == x⁺
-    @assert (h⁺, l⁺) == canonicalize2(h⁺, l⁺)
-    r⁺ = TwicePrecision(h⁺, l⁺)
-    # return interval (exclusive)
-    @assert r⁻ < r⁺
-    r⁻, r⁺
+    @assert (h, l) == canonicalize2(h, l)
+    @assert fma(y, h, y*prevfloat(l)) == x⁻
+    @assert fma(y, h, y*nextfloat(l)) == x⁺
+    r = TwicePrecision(h, l)
 end
 
-ratio_ival(x::T, y::T) where {T<:AbstractFloat} =
-    ratio_ival((prevfloat(x), nextfloat(x)), y)
+"""
+    ratio_break⁻(x⁺, y) -> r
+
+Return a `TwicePrecision` value `r` such that:
+
+    - `T(y*prevfloat(r)) == x⁻`
+    - `T(y*prevfloat(r)) == (x⁻ + x⁺)/2`
+    - `T(y*prevfloat(r)) == x⁺`
+
+where `x⁻ = prevfloat(x⁺)`.
+"""
+function ratio_break⁻(x⁺::T, y::T) where {T<:AbstractFloat}
+    ratio_break⁺(prevfloat(x⁺), y)
+end
+
+"""
+    ratio_ival(x, y)
+
+Shorthand for `minmax(ratio_break⁻(x, y), ratio_break⁺(x, y))`.
+"""
+function ratio_ival(x::T, y::T) where {T<:AbstractFloat}
+    minmax(ratio_break⁻(x, y), ratio_break⁺(x, y))
+end
 
 struct FRange{T<:AbstractFloat} <: AbstractRange{T}
     c::T
