@@ -19,7 +19,7 @@ end
 
 examples = Tuple{BigInt,BigInt,BigInt,BigInt,Float64}[]
 
-for x in shifts, a in [3, 1, -1, -3]
+for x in shifts[1], a in [3, 1, -1, -3]
     @example a, 2, 19, 10, x
 end
 

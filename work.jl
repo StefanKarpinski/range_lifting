@@ -228,20 +228,20 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     bₛ⁻, bₛ⁺ = ratio_ival(b, s)
     c = d = e = zero(T)
     while true
-        d += one(T)
-        c⁻ = round(ldexp(T(d*aₛ⁻), -p), RoundUp)
-        c⁺ = round(ldexp(T(d*aₛ⁺), -p), RoundDown)
+        d += exp2(-p)
+        c⁻ = round(T(d*aₛ⁻), RoundUp)
+        c⁺ = round(T(d*aₛ⁺), RoundDown)
         c⁻ ≤ c⁺ || continue
-        e⁻ = round(ldexp(T(d*bₛ⁻), -p), RoundUp)
-        e⁺ = round(ldexp(T(d*bₛ⁺), -p), RoundDown)
+        e⁻ = round(T(d*bₛ⁻), RoundUp)
+        e⁺ = round(T(d*bₛ⁺), RoundDown)
         e⁻ ≤ e⁺ || continue
-        c = ldexp(simplest_float(c⁻, c⁺), p)
-        e = ldexp(simplest_float(e⁻, e⁺), p)
+        c = simplest_float(c⁻, c⁺)
+        e = simplest_float(e⁻, e⁺)
         break
     end
     # eliminate common powers of two
     z = min(tz(c), tz(d), tz(e))
-    @assert z ≥ p
+    @assert z ≥ -p
     t = exp2(-z)
     c *= t; d *= t; e *= t
     # return values
