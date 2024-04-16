@@ -39,6 +39,9 @@ Base.nextfloat(x::TwicePrecision, k::Integer=1) =
 Base.prevfloat(x::TwicePrecision, k::Integer=1) =
     TwicePrecision(canonicalize2(x.hi, prevfloat(x.lo, k))...)
 
+tmul(x::T, y::TwicePrecision{T}) where {T<:AbstractFloat} =
+    fma(x, y.hi, x*y.lo)
+
 function tz(x::T) where {T<:AbstractFloat}
     iszero(x) && return typemax(Int)
     n, p = Base.decompose(x)
@@ -229,11 +232,11 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     c = d = e = zero(T)
     while true
         d += exp2(-p)
-        c⁻ = round(T(d*aₛ⁻), RoundUp)
-        c⁺ = round(T(d*aₛ⁺), RoundDown)
+        c⁻ = round(tmul(d, aₛ⁻), RoundUp)
+        c⁺ = round(tmul(d, aₛ⁺), RoundDown)
         c⁻ ≤ c⁺ || continue
-        e⁻ = round(T(d*bₛ⁻), RoundUp)
-        e⁺ = round(T(d*bₛ⁺), RoundDown)
+        e⁻ = round(tmul(d, bₛ⁻), RoundUp)
+        e⁺ = round(tmul(d, bₛ⁺), RoundDown)
         e⁻ ≤ e⁺ || continue
         c = simplest_float(c⁻, c⁺)
         e = simplest_float(e⁻, e⁺)
@@ -267,9 +270,9 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     g = num/den
     @assert lo ≤ g ≤ hi
     # check that inputs are hit
-    @assert T(c*g) == a
-    @assert T(d*g) == s
-    @assert T(e*g) == b
+    @assert tmul(c, g) == a
+    @assert tmul(d, g) == s
+    @assert tmul(e, g) == b
     # return range object
     FRange(c, d, n, g)
 end

@@ -19,7 +19,7 @@ end
 
 examples = Tuple{BigInt,BigInt,BigInt,BigInt,Float64}[]
 
-for x in shifts[1], a in [3, 1, -1, -3]
+for x in shifts[1:2], a in [3, 1, -1, -3]
     @example a, 2, 19, 10, x
 end
 
@@ -31,7 +31,9 @@ end
 for (A, S, B, D, x) in examples
     global a, s, b, r, N
     @show A, S, B, D, x
-    (a, s, b) = map(Float64, (A/D + x, S/D, B/D + x))
+    (a, s, b) = map(Float64,
+        iszero(x) ? (A/D, S/D, B/D) :
+                    ((A + D*x)/D, S/D, (B + D*x)/D))
     @show (a, s, b)
     try
         r = lift_range(a, s, b)
