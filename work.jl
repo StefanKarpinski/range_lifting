@@ -139,9 +139,17 @@ function simplest_rational(
     n = simplest_float(d*lo, d*hi)
     d = simplest_float(n/hi, n/lo)
 
+    # TODO: eliminate common factors
+
     # check we're in the interval
     @assert lo ≤ n/d ≤ hi
     return n, d
+end
+
+function ival(x::T) where {T<:AbstractFloat}
+    lo = (TwicePrecision(x) + TwicePrecision(prevfloat(x)))/2
+    hi = (TwicePrecision(x) + TwicePrecision(nextfloat(x)))/2
+    lo, hi
 end
 
 """
@@ -218,37 +226,47 @@ Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
     T((TwicePrecision{T}(i-1)*r.d + r.c)*r.g)
 
 function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
-    # compute the length first
-    ϵ = max(eps(a), eps(b))
-    n⁻ = ratio_break⁻((b - a) - ϵ, s)
-    n⁺ = ratio_break⁺((b - a) + ϵ, s)
+    # handle negative step
+    if signbit(s)
+        n, c, d, e = range_ratios(b, -s, a)
+        return n, e, d, c
+    end
+    # double precision intervals for a, s, b
+    a⁻, a⁺ = ival(a)
+    s⁻, s⁺ = ival(s)
+    b⁻, b⁺ = ival(b)
+    # find endpoint ratio interval
+    r_a⁻, r_a⁺ = signbit(a) ? (a⁻/s⁻, a⁺/s⁺) : (a⁻/s⁺, a⁺/s⁻)
+    r_b⁻, r_b⁺ = signbit(b) ? (b⁻/s⁻, b⁺/s⁺) : (b⁻/s⁺, b⁺/s⁻)
+    # pick simplest range length
+    n⁻, n⁺ = r_b⁻ - r_a⁺, r_b⁺ - r_a⁻
     n = T(simplest_float(n⁻, n⁺))
     # check if end-point can be hit:
     p = tz(n)
     p ≥ 0 || error("end-point can't be hit")
-    # find best grid divisor
-    aₛ⁻, aₛ⁺ = ratio_ival(a, s)
-    bₛ⁻, bₛ⁺ = ratio_ival(b, s)
-    c = d = e = zero(T)
-    while true
-        d += exp2(-p)
-        c⁻ = round(tmul(d, aₛ⁻), RoundUp)
-        c⁺ = round(tmul(d, aₛ⁺), RoundDown)
-        c⁻ ≤ c⁺ || continue
-        e⁻ = round(tmul(d, bₛ⁻), RoundUp)
-        e⁺ = round(tmul(d, bₛ⁺), RoundDown)
-        e⁻ ≤ e⁺ || continue
-        c = simplest_float(c⁻, c⁺)
-        e = simplest_float(e⁻, e⁺)
-        break
-    end
+    # find common fraction interval
+    f⁻ = max(r_a⁻, r_b⁻ - n)
+    f⁺ = min(r_a⁺, r_b⁺ - n)
+    q = round(prevfloat(f⁻), RoundDown)
+    f⁻ -= q; f⁺ -= q;
+    e = exp2(-p)
+    f⁻ *= e; f⁺ *= e
+    # find simplest rational in interval
+    d = T(simplest_rational_core(f⁻, f⁺)[2])
+    # compute endpoint ratios
+    c⁻ = round(tmul(d, r_a⁻), RoundUp)
+    c⁺ = round(tmul(d, r_a⁺), RoundDown)
+    c = simplest_float(c⁻, c⁺)
+    e⁻ = round(tmul(d, r_b⁻), RoundUp)
+    e⁺ = round(tmul(d, r_b⁺), RoundDown)
+    e = simplest_float(e⁻, e⁺)
     # eliminate common powers of two
     z = min(tz(c), tz(d), tz(e))
     @assert z ≥ -p
     t = exp2(-z)
     c *= t; d *= t; e *= t
     # return values
-    n, c, d, e
+    return n, c, d, e
 end
 
 function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
@@ -265,7 +283,7 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     lo_b, hi_b = ratio_ival(b, e)
     lo = max(lo_a, lo_s, lo_b)
     hi = min(hi_a, hi_s, hi_b)
-    @assert lo < hi # otherwise can't work
+    @assert lo ≤ hi # otherwise can't work
     num, den = simplest_rational(lo, hi)
     g = num/den
     @assert lo ≤ g ≤ hi
