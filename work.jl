@@ -219,9 +219,9 @@ Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
 
 function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     # compute the length first
-    ϵ = max(eps(a), eps(b))
-    n⁻ = ratio_break⁻((b - a) - ϵ, s)
-    n⁺ = ratio_break⁺((b - a) + ϵ, s)
+    aₛ⁻, aₛ⁺ = ratio_ival(a, s)
+    bₛ⁻, bₛ⁺ = ratio_ival(b, s)
+    n⁻, n⁺ = bₛ⁻ - aₛ⁺, bₛ⁺ - aₛ⁻
     n = T(simplest_float(n⁻, n⁺))
     # check if end-point can be hit:
     p = tz(n)
