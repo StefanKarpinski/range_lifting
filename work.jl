@@ -284,8 +284,7 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     r_b⁻ = ratio_break⁻(b⁻, signbit(b) ? s⁻ : s⁺)
     r_b⁺ = ratio_break⁺(b⁺, signbit(b) ? s⁺ : s⁻)
     # pick simplest range length
-    n⁻, n⁺ = r_b⁻ - r_a⁺, r_b⁺ - r_a⁻
-    n = T(simplest_float(n⁻, n⁺))
+    n = T(simplest_float(r_b⁻ - r_a⁺, r_b⁺ - r_a⁻))
     # check if end-point can be hit:
     p = tz(n)
     p ≥ 0 || error("end-point can't be hit")
@@ -335,17 +334,3 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     # return range object
     FRange(c, d, n, g)
 end
-
-# example: (a, s, b) = (0.2, 0.1, 1.1)
-# example: (a, s, b) = (-3e50, 1e50, 4e50)
-# problem: can be made to hit zero but shouldn't!
-# example: (a, s, b) = (-1e20, 3.0, 2e20)
-# worse: (a, s, b) = (-1.0e17, 0.3, 2.0e18)
-# another: (a, s, b) = (-1e14, .9, 8e15)
-
-# example: (a, s, b) = (1/10 + pi, 2/10, 19/10 + pi)
-# - this works but makes range_ratios really slow
-# - need faster approach than linear scanning
-# example: (a, s, b) = (1/10 + x, 2/10, 19/10 + x)
-# - with x = 0.6367464963941911
-# - lo < hi fails, may need higher precision range_ratios
