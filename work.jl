@@ -5,6 +5,7 @@ Base.isless(x::TwicePrecision, y::TwicePrecision) = x < y
 Base.zero(x::TwicePrecision) = typeof(x)(zero(x.hi))
 Base.one(x::TwicePrecision) = typeof(x)(one(x.hi))
 
+Base.signbit(x::TwicePrecision) = iszero(x.hi) ? signbit(x.lo) : signbit(x.hi)
 Base.isinteger(x::TwicePrecision) = isinteger(x.hi) & isinteger(x.lo)
 
 function Base.round(
@@ -157,8 +158,10 @@ end
 
 Return a `TwicePrecision` value `r` such that:
 
-    - `T(y*prevfloat(r)) == x`
-    - `T(y*nextfloat(r)) != x`
+    - `typeof(x, y*prevfloat(r)) == x`
+    - `typeof(x, y*nextfloat(r)) != x`
+
+Inputs can be floats or `TwicePrecision` floats.
 """
 function ratio_break⁺(x::T, y::T) where {T<:AbstractFloat}
     x⁻ = x
@@ -189,13 +192,34 @@ function ratio_break⁺(x::T, y::T) where {T<:AbstractFloat}
     r = TwicePrecision(h, l)
 end
 
+function ratio_break⁺(
+    x::TwicePrecision{T},
+    y::TwicePrecision{T},
+) where {T<:AbstractFloat}
+    if signbit(y)
+        x, y = -x, -y
+    end
+    r = x/y
+    while r*y ≤ x
+        r = nextfloat(r)
+    end
+    while r*y > x
+        r = prevfloat(r)
+    end
+    @assert r*y == x
+    @assert nextfloat(r)*y > x
+    return r
+end
+
 """
     ratio_break⁻(x, y) -> r
 
 Return a `TwicePrecision` value `r` such that:
 
-    - `T(y*prevfloat(r)) != x`
-    - `T(y*nextfloat(r)) == x`
+    - `typeof(x, y*prevfloat(r)) != x`
+    - `typeof(x, y*nextfloat(r)) == x`
+
+Inputs can be floats or `TwicePrecision` floats.
 """
 function ratio_break⁻(x::T, y::T) where {T<:AbstractFloat}
     if signbit(y)
@@ -204,12 +228,31 @@ function ratio_break⁻(x::T, y::T) where {T<:AbstractFloat}
     ratio_break⁺(prevfloat(x), y)
 end
 
+function ratio_break⁻(
+    x::TwicePrecision{T},
+    y::TwicePrecision{T},
+) where {T<:AbstractFloat}
+    if signbit(y)
+        x, y = -x, -y
+    end
+    r = x/y
+    while r*y ≥ x
+        r = prevfloat(r)
+    end
+    while r*y < x
+        r = nextfloat(r)
+    end
+    @assert r*y == x
+    @assert prevfloat(r)*y < x
+    return r
+end
+
 """
     ratio_ival(x, y)
 
 Shorthand for `ratio_break⁻(x, y), ratio_break⁺(x, y)`.
 """
-function ratio_ival(x::T, y::T) where {T<:AbstractFloat}
+function ratio_ival(x::T, y::T) where {T}
     ratio_break⁻(x, y), ratio_break⁺(x, y)
 end
 
@@ -235,9 +278,11 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     a⁻, a⁺ = ival(a)
     s⁻, s⁺ = ival(s)
     b⁻, b⁺ = ival(b)
-    # find endpoint ratio interval
-    r_a⁻, r_a⁺ = signbit(a) ? (a⁻/s⁻, a⁺/s⁺) : (a⁻/s⁺, a⁺/s⁻)
-    r_b⁻, r_b⁺ = signbit(b) ? (b⁻/s⁻, b⁺/s⁺) : (b⁻/s⁺, b⁺/s⁻)
+    # find end-point ratio interval
+    r_a⁻ = ratio_break⁻(a⁻, signbit(a) ? s⁻ : s⁺)
+    r_a⁺ = ratio_break⁺(a⁺, signbit(a) ? s⁺ : s⁻)
+    r_b⁻ = ratio_break⁻(b⁻, signbit(b) ? s⁻ : s⁺)
+    r_b⁺ = ratio_break⁺(b⁺, signbit(b) ? s⁺ : s⁻)
     # pick simplest range length
     n⁻, n⁺ = r_b⁻ - r_a⁺, r_b⁺ - r_a⁻
     n = T(simplest_float(n⁻, n⁺))
@@ -253,7 +298,7 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     f⁻ *= e; f⁺ *= e
     # find simplest rational in interval
     d = T(simplest_rational_core(f⁻, f⁺)[2])
-    # compute endpoint ratios
+    # find simplest end-point ratios
     c⁻ = round(tmul(d, r_a⁻), RoundUp)
     c⁺ = round(tmul(d, r_a⁺), RoundDown)
     c = simplest_float(c⁻, c⁺)
