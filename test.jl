@@ -28,15 +28,26 @@ end
 @example "-1e18", 3, "2e19", 10, 0
 @example "-1e15", 9, "8e16", 10, 0
 
-for (A, S, B, D, x) in examples
-    global a, s, b, r, N
-    @show A, S, B, D, x
-    (a, s, b) = map(Float64, (A/D + x, S/D, B/D + x))
-    @show (a, s, b)
-    try
+@testset "tests" begin
+    T = Float64
+    for (A, S, B, D, x) in examples
+        @show (A, S, B, D, x)
+        (a, s, b) = map(T, (A/D + x, S/D, B/D + x))
         r = lift_range(a, s, b)
-    catch err
-        show(err)
-        println()
+        R = A:S:B
+        l = length(R)
+        @test r.n == l-1
+        @test first(r) == a
+        @test step(r) == s
+        @test last(r) == b
+        @test r[1] == a
+        l ≤ typemax(Int) || continue
+        @test length(r) == l
+        @test r[l] == b
+        # i = searchsortedfirst(R, 0)
+        # for j = i-10:i+10
+        #     1 ≤ j ≤ l || continue
+        #     @test r[j] ≈ T(R[j]/D + x) atol=eps(x)
+        # end
     end
 end

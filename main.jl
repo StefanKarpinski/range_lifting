@@ -8,6 +8,11 @@ Base.one(x::TwicePrecision) = typeof(x)(one(x.hi))
 Base.signbit(x::TwicePrecision) = iszero(x.hi) ? signbit(x.lo) : signbit(x.hi)
 Base.isinteger(x::TwicePrecision) = isinteger(x.hi) & isinteger(x.lo)
 
+Base.nextfloat(x::TwicePrecision, k::Integer=1) =
+    TwicePrecision(canonicalize2(x.hi, nextfloat(x.lo, k))...)
+Base.prevfloat(x::TwicePrecision, k::Integer=1) =
+    TwicePrecision(canonicalize2(x.hi, prevfloat(x.lo, k))...)
+
 function Base.round(
     x::TwicePrecision{<:AbstractFloat},
     R::RoundingMode{mode} = RoundNearest,
@@ -34,11 +39,6 @@ function Base.div(
 ) where {T}
     round(a/b, R)
 end
-
-Base.nextfloat(x::TwicePrecision, k::Integer=1) =
-    TwicePrecision(canonicalize2(x.hi, nextfloat(x.lo, k))...)
-Base.prevfloat(x::TwicePrecision, k::Integer=1) =
-    TwicePrecision(canonicalize2(x.hi, prevfloat(x.lo, k))...)
 
 tmul(x::T, y::TwicePrecision{T}) where {T<:AbstractFloat} =
     fma(x, y.hi, x*y.lo)
@@ -81,6 +81,7 @@ function simplest_float(
     lo.hi + simplest_float(TwicePrecision(lo.lo), hi - lo.hi)
 end
 
+# TODO: harden against overflow
 function ratio(x::TwicePrecision{T}) where {T<:AbstractFloat}
     p = min(0, tz(x))
     n = TwicePrecision(ldexp(x.hi, -p), ldexp(x.lo, -p))
@@ -140,7 +141,10 @@ function simplest_rational(
     n = simplest_float(d*lo, d*hi)
     d = simplest_float(n/hi, n/lo)
 
-    # TODO: eliminate common factors
+    # eliminate common factors of two
+    z = min(tz(n), tz(d))
+    n *= exp2(-z)
+    d *= exp2(-z)
 
     # check we're in the interval
     @assert lo ≤ n/d ≤ hi
@@ -264,7 +268,10 @@ struct FRange{T<:AbstractFloat} <: AbstractRange{T}
 end
 
 Base.length(r::FRange) = Int(r.n) + 1
-Base.step(r::FRange{T}) where {T<:AbstractFloat} = T(r.d*r.g)
+Base.first(r::FRange) = r[1]
+Base.step(r::FRange) = tmul(r.d, r.g)
+Base.last(r::FRange) = eltype(r)((r.n*r.d + r.c)*r.g)
+
 Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
     T((TwicePrecision{T}(i-1)*r.d + r.c)*r.g)
 
