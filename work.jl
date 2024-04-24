@@ -298,8 +298,8 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     # find simplest rational in interval
     d = T(simplest_rational_core(f⁻, f⁺)[2])
     # find simplest end-point ratios
-    c = simplest_float(tmul(d, r_a⁻), tmul(d, r_a⁺))
-    e = simplest_float(tmul(d, r_b⁻), tmul(d, r_b⁺))
+    c = T(simplest_float(d*r_a⁻, d*r_a⁺))
+    e = T(simplest_float(d*r_b⁻, d*r_b⁺))
     # eliminate common powers of two
     z = min(tz(c), tz(d), tz(e))
     @assert z ≥ -p
