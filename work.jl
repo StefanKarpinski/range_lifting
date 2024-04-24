@@ -275,83 +275,113 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
         return n, e, d, c
     end
     # double precision intervals for a, s, b
-    a⁻, a⁺ = ival(a)
-    s⁻, s⁺ = ival(s)
-    b⁻, b⁺ = ival(b)
+    a⁻, a⁺ = ival(abs(a))
+    s⁻, s⁺ = ival(abs(s))
+    b⁻, b⁺ = ival(abs(b))
     # end-point/step ratio intervals
-    r_a⁻ = ratio_break⁻(a⁻, signbit(a) ? s⁻ : s⁺)
-    r_a⁺ = ratio_break⁺(a⁺, signbit(a) ? s⁺ : s⁻)
-    r_b⁻ = ratio_break⁻(b⁻, signbit(b) ? s⁻ : s⁺)
-    r_b⁺ = ratio_break⁺(b⁺, signbit(b) ? s⁺ : s⁻)
+    r_a⁻ = ratio_break⁻(a⁻, s⁺)
+    r_a⁺ = ratio_break⁺(a⁺, s⁻)
+    r_b⁻ = ratio_break⁻(b⁻, s⁺)
+    r_b⁺ = ratio_break⁺(b⁺, s⁻)
+    # signed ratio intervals
+    sr_a⁻, sr_a⁺ = signbit(a) ? (-r_a⁺, -r_a⁻) : (r_a⁻, r_a⁺)
+    sr_b⁻, sr_b⁺ = signbit(b) ? (-r_b⁺, -r_b⁻) : (r_b⁻, r_b⁺)
     # pick simplest range length
-    n = T(simplest_float(r_b⁻ - r_a⁺, r_b⁺ - r_a⁻))
+    n = T(simplest_float(sr_b⁻ - sr_a⁺, sr_b⁺ - sr_a⁻))
     # check if end-point can be hit
     p = tz(n)
     p ≥ 0 || error("end-point can't be hit (length)")
-    # make a and b interval bounds positive
-    if signbit(a)
-        a⁻, a⁺ = -a⁺, -a⁻
-        r_a⁻, r_a⁺ = -r_a⁺, -r_a⁻
-    end
-    if signbit(b)
-        b⁻, b⁺ = -b⁺, -b⁻
-        r_b⁻, r_b⁺ = -r_b⁺, -r_b⁻
-    end
-    # stabilize lower bounds
+    # ratio intervals between end-points
     r_ab⁻ = ratio_break⁻(a⁻, b⁺)
-    r_ba⁻ = ratio_break⁻(b⁻, a⁺)
-    while true
-        changed = false
-        # shrink based on length
-        if r_a⁻ < r_b⁻ - n
-            r_a⁻ = r_b⁻ - n
-            changed = true
-        end
-        if r_b⁻ < r_a⁻ + n
-            r_b⁻ = r_a⁻ + n
-            changed = true
-        end
-        # shrink based on ratios
-        if r_a⁻ < r_b⁻ * r_ab⁻
-            r_a⁻ = r_b⁻ * r_ab⁻
-            changed = true
-        end
-        if r_b⁻ < r_a⁻ * r_ba⁻
-            r_b⁻ = r_a⁻ * r_ba⁻
-            changed = true
-        end
-        changed || break
-    end
-    # stabilize upper bounds
     r_ab⁺ = ratio_break⁺(a⁺, b⁻)
+    r_ba⁻ = ratio_break⁻(b⁻, a⁺)
     r_ba⁺ = ratio_break⁺(b⁺, a⁻)
+    # stabilize ratio intervals
     while true
         changed = false
-        # shrink based on length
-        if r_a⁺ > r_b⁺ - n
-            r_a⁺ = r_b⁺ - n
+        # shrink [a] based on length
+        if sr_a⁻ < sr_b⁻ - n
+            sr_a⁻ = sr_b⁻ - n
+            if !signbit(a)
+                r_a⁻ = sr_a⁻
+            else
+                r_a⁺ = -sr_a⁻
+            end
             changed = true
         end
-        if r_b⁺ > r_a⁺ + n
-            r_b⁺ = r_a⁺ + n
+        if sr_a⁺ > sr_b⁺ - n
+            sr_a⁺ = sr_b⁺ - n
+            if !signbit(a)
+                r_a⁺ = sr_a⁺
+            else
+                r_a⁻ = -sr_a⁺
+            end
             changed = true
         end
-        # shrink based on ratios
-        if r_a⁺ > r_b⁺ * r_ab⁺
-            r_a⁺ = r_b⁺ * r_ab⁺
+        # shrink [b] based on length
+        if sr_b⁻ < sr_a⁻ + n
+            sr_b⁻ = sr_a⁻ + n
+            if !signbit(b)
+                r_b⁻ = sr_b⁻
+            else
+                r_b⁺ = -sr_b⁻
+            end
             changed = true
         end
-        if r_b⁺ > r_a⁺ * r_ba⁺
-            r_b⁺ = r_a⁺ * r_ba⁺
+        if sr_b⁺ > sr_a⁺ + n
+            sr_b⁺ = sr_a⁺ + n
+            if !signbit(b)
+                r_b⁺ = sr_b⁺
+            else
+                r_b⁻ = -sr_b⁺
+            end
+            changed = true
+        end
+        # shrink [a] based on ratios
+        if r_a⁻ < r_b⁺ * r_ab⁻
+            r_a⁻ = r_b⁺ * r_ab⁻
+            if !signbit(a)
+                sr_a⁻ = r_a⁻
+            else
+                sr_a⁺ = -r_a⁻
+            end
+            changed = true
+        end
+        if r_a⁺ > r_b⁻ * r_ab⁺
+            r_a⁺ = r_b⁻ * r_ab⁺
+            if !signbit(a)
+                sr_a⁺ = r_a⁺
+            else
+                sr_a⁻ = -r_a⁺
+            end
+            changed = true
+        end
+        # shrink [b] based on ratios
+        if r_b⁻ < r_a⁺ * r_ba⁻
+            r_b⁻ = r_a⁺ * r_ba⁻
+            if !signbit(b)
+                sr_b⁻ = r_b⁻
+            else
+                sr_b⁺ = -r_b⁻
+            end
+            changed = true
+        end
+        if r_b⁺ > r_a⁻ * r_ba⁺
+            r_b⁺ = r_a⁻ * r_ba⁺
+            if !signbit(b)
+                sr_b⁺ = r_b⁺
+            else
+                sr_b⁻ = -r_b⁺
+            end
             changed = true
         end
         changed || break
     end
     # find common fraction interval
-    q_a = round(prevfloat(r_a⁻), RoundDown)
-    q_b = round(prevfloat(r_b⁻), RoundDown)
-    f_a⁻, f_a⁺ = r_a⁻ - q_a, r_a⁺ - q_a
-    f_b⁻, f_b⁺ = r_b⁻ - q_b, r_b⁺ - q_b
+    q_a = round(prevfloat(sr_a⁻), RoundDown)
+    q_b = round(prevfloat(sr_b⁻), RoundDown)
+    f_a⁻, f_a⁺ = sr_a⁻ - q_a, sr_a⁺ - q_a
+    f_b⁻, f_b⁺ = sr_b⁻ - q_b, sr_b⁺ - q_b
     f⁻, f⁺ = max(f_a⁻, f_b⁻), min(f_a⁺, f_b⁺)
     P = exp2(-p)
     f⁻ *= P; f⁺ *= P
