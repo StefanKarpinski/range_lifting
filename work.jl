@@ -378,13 +378,15 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
         changed || break
     end
     # find common fraction interval
-    q_a = round(prevfloat(sr_a⁻), RoundDown)
-    q_b = round(prevfloat(sr_b⁻), RoundDown)
-    f_a⁻, f_a⁺ = sr_a⁻ - q_a, sr_a⁺ - q_a
-    f_b⁻, f_b⁺ = sr_b⁻ - q_b, sr_b⁺ - q_b
-    f⁻, f⁺ = max(f_a⁻, f_b⁻), min(f_a⁺, f_b⁺)
-    P = exp2(-p)
-    f⁻ *= P; f⁺ *= P
+    if abs(a) ≤ abs(b)
+        q = round(prevfloat(sr_a⁻), RoundDown)
+        f⁻ = sr_a⁻ - q
+        f⁺ = sr_a⁺ - q
+    else
+        q = round(prevfloat(sr_b⁻), RoundDown)
+        f⁻ = sr_b⁻ - q
+        f⁺ = sr_b⁺ - q
+    end
     f⁻ ≤ f⁺ || error("end-point can't be hit (ratios)")
     # find simplest rational in interval
     d = T(simplest_rational_core(f⁻, f⁺)[2])
