@@ -338,8 +338,8 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
             changed = true
         end
         # shrink [a] based on ratios
-        if r_a⁻ < r_b⁺ * r_ab⁻
-            r_a⁻ = r_b⁺ * r_ab⁻
+        if r_a⁻ < r_b⁻ * r_ab⁻
+            r_a⁻ = r_b⁻ * r_ab⁻
             if !signbit(a)
                 sr_a⁻ = r_a⁻
             else
@@ -347,8 +347,8 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
             end
             changed = true
         end
-        if r_a⁺ > r_b⁻ * r_ab⁺
-            r_a⁺ = r_b⁻ * r_ab⁺
+        if r_a⁺ > r_b⁺ * r_ab⁺
+            r_a⁺ = r_b⁺ * r_ab⁺
             if !signbit(a)
                 sr_a⁺ = r_a⁺
             else
@@ -357,8 +357,8 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
             changed = true
         end
         # shrink [b] based on ratios
-        if r_b⁻ < r_a⁺ * r_ba⁻
-            r_b⁻ = r_a⁺ * r_ba⁻
+        if r_b⁻ < r_a⁻ * r_ba⁻
+            r_b⁻ = r_a⁻ * r_ba⁻
             if !signbit(b)
                 sr_b⁻ = r_b⁻
             else
@@ -366,8 +366,8 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
             end
             changed = true
         end
-        if r_b⁺ > r_a⁻ * r_ba⁺
-            r_b⁺ = r_a⁻ * r_ba⁺
+        if r_b⁺ > r_a⁺ * r_ba⁺
+            r_b⁺ = r_a⁺ * r_ba⁺
             if !signbit(b)
                 sr_b⁺ = r_b⁺
             else
