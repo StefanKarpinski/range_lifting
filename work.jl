@@ -291,9 +291,11 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     # make a and b interval bounds positive
     if signbit(a)
         a⁻, a⁺ = -a⁺, -a⁻
+        r_a⁻, r_a⁺ = -r_a⁺, -r_a⁻
     end
     if signbit(b)
         b⁻, b⁺ = -b⁺, -b⁻
+        r_b⁻, r_b⁺ = -r_b⁺, -r_b⁻
     end
     # stabilize lower bounds
     r_ab⁻ = ratio_break⁻(a⁻, b⁺)
