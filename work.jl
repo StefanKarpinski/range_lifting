@@ -389,7 +389,7 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     end
     f⁻ ≤ f⁺ || error("end-point can't be hit (ratios)")
     # find simplest rational in interval
-    d = T(simplest_rational_core(f⁻, f⁺)[2])
+    d = T(simplest_rational(f⁻*exp2(-p), f⁺*exp2(-p))[2])
     # find simplest end-point ratios
     c = T(simplest_float(d*r_a⁻, d*r_a⁺))
     e = T(simplest_float(d*r_b⁻, d*r_b⁺))
