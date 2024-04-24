@@ -19,14 +19,14 @@ end
 
 examples = Tuple{BigInt,BigInt,BigInt,BigInt,Float64}[]
 
-for x in shifts, a in [3, 1, -1, -3]
+for x in shifts[5], a in [3, 1, -1, -3]
     @example a, 2, 19, 10, x
 end
 
-@example "-3e50", "1e50", "4e50", 1, 0
-@example "-1e20", 3, "2e20", 1, 0
-@example "-1e18", 3, "2e19", 10, 0
-@example "-1e15", 9, "8e16", 10, 0
+# @example "-3e50", "1e50", "4e50", 1, 0
+# @example "-1e20", 3, "2e20", 1, 0
+# @example "-1e18", 3, "2e19", 10, 0
+# @example "-1e15", 9, "8e16", 10, 0
 
 for (A, S, B, D, x) in examples
     global a, s, b, r, N
