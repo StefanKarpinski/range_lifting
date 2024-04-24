@@ -278,23 +278,82 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     a⁻, a⁺ = ival(a)
     s⁻, s⁺ = ival(s)
     b⁻, b⁺ = ival(b)
-    # find end-point ratio interval
+    # end-point/step ratio intervals
     r_a⁻ = ratio_break⁻(a⁻, signbit(a) ? s⁻ : s⁺)
     r_a⁺ = ratio_break⁺(a⁺, signbit(a) ? s⁺ : s⁻)
     r_b⁻ = ratio_break⁻(b⁻, signbit(b) ? s⁻ : s⁺)
     r_b⁺ = ratio_break⁺(b⁺, signbit(b) ? s⁺ : s⁻)
     # pick simplest range length
     n = T(simplest_float(r_b⁻ - r_a⁺, r_b⁺ - r_a⁻))
-    # check if end-point can be hit:
+    # check if end-point can be hit
     p = tz(n)
-    p ≥ 0 || error("end-point can't be hit")
+    p ≥ 0 || error("end-point can't be hit (length)")
+    # make a and b interval bounds positive
+    if signbit(a)
+        a⁻, a⁺ = -a⁺, -a⁻
+    end
+    if signbit(b)
+        b⁻, b⁺ = -b⁺, -b⁻
+    end
+    # stabilize lower bounds
+    r_ab⁻ = ratio_break⁻(a⁻, b⁺)
+    r_ba⁻ = ratio_break⁻(b⁻, a⁺)
+    while true
+        changed = false
+        # shrink based on length
+        if r_a⁻ < r_b⁻ - n
+            r_a⁻ = r_b⁻ - n
+            changed = true
+        end
+        if r_b⁻ < r_a⁻ + n
+            r_b⁻ = r_a⁻ + n
+            changed = true
+        end
+        # shrink based on ratios
+        if r_a⁻ < r_b⁻ * r_ab⁻
+            r_a⁻ = r_b⁻ * r_ab⁻
+            changed = true
+        end
+        if r_b⁻ < r_a⁻ * r_ba⁻
+            r_b⁻ = r_a⁻ * r_ba⁻
+            changed = true
+        end
+        changed || break
+    end
+    # stabilize upper bounds
+    r_ab⁺ = ratio_break⁺(a⁺, b⁻)
+    r_ba⁺ = ratio_break⁺(b⁺, a⁻)
+    while true
+        changed = false
+        # shrink based on length
+        if r_a⁺ > r_b⁺ - n
+            r_a⁺ = r_b⁺ - n
+            changed = true
+        end
+        if r_b⁺ > r_a⁺ + n
+            r_b⁺ = r_a⁺ + n
+            changed = true
+        end
+        # shrink based on ratios
+        if r_a⁺ > r_b⁺ * r_ab⁺
+            r_a⁺ = r_b⁺ * r_ab⁺
+            changed = true
+        end
+        if r_b⁺ > r_a⁺ * r_ba⁺
+            r_b⁺ = r_a⁺ * r_ba⁺
+            changed = true
+        end
+        changed || break
+    end
     # find common fraction interval
-    f⁻ = max(r_a⁻, r_b⁻ - n)
-    f⁺ = min(r_a⁺, r_b⁺ - n)
-    q = round(prevfloat(f⁻), RoundDown)
-    f⁻ -= q; f⁺ -= q;
-    e = exp2(-p)
-    f⁻ *= e; f⁺ *= e
+    q_a = round(prevfloat(r_a⁻), RoundDown)
+    q_b = round(prevfloat(r_b⁻), RoundDown)
+    f_a⁻, f_a⁺ = r_a⁻ - q_a, r_a⁺ - q_a
+    f_b⁻, f_b⁺ = r_b⁻ - q_b, r_b⁺ - q_b
+    f⁻, f⁺ = max(f_a⁻, f_b⁻), min(f_a⁺, f_b⁺)
+    P = exp2(-p)
+    f⁻ *= P; f⁺ *= P
+    f⁻ ≤ f⁺ || error("end-point can't be hit (ratios)")
     # find simplest rational in interval
     d = T(simplest_rational_core(f⁻, f⁺)[2])
     # find simplest end-point ratios
@@ -305,6 +364,20 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     @assert z ≥ -p
     t = exp2(-z)
     c *= t; d *= t; e *= t
+    # check that c:e matches a:b
+    @assert a⁻*e ≤ b⁺*c
+    @assert a⁺*e ≥ b⁻*c
+    # check that c:d matches a:s
+    @assert a⁻*d ≤ s⁺*c
+    @assert a⁺*d ≥ s⁻*c
+    # check that e:d matches b:s
+    @assert b⁻*d ≤ s⁺*e
+    @assert b⁺*d ≥ s⁻*e
+    # restore end-point signs
+    signbit(a) && (c = -c)
+    signbit(b) && (e = -e)
+    # check length
+    @assert d*n == e - c
     # return values
     return n, c, d, e
 end
