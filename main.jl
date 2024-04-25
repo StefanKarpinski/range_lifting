@@ -1,7 +1,12 @@
 import Base: TwicePrecision, canonicalize2, div12
 
-# not a generally correct definition, but good enough here
-Base.isless(x::TwicePrecision, y::TwicePrecision) = x < y
+Base.isless(x::TwicePrecision, y::TwicePrecision) =
+    isless(x.hi, y.hi) || isequal(x.hi, y.hi) && isless(x.lo, y.lo)
+Base.:(<=)(x::TwicePrecision, y::TwicePrecision) =
+    x.hi < y.hi || x.hi == y.hi && x.lo <= y.lo
+Base.:(<)(x::TwicePrecision, y::TwicePrecision) =
+    x.hi < y.hi || x.hi == y.hi && x.lo < y.lo
+
 Base.zero(x::TwicePrecision) = typeof(x)(zero(x.hi))
 Base.one(x::TwicePrecision) = typeof(x)(one(x.hi))
 
