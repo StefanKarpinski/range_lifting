@@ -1,4 +1,4 @@
-import Base: TwicePrecision, canonicalize2, div12
+import Base: TwicePrecision, canonicalize2, add12, div12
 
 Base.isless(x::TwicePrecision, y::TwicePrecision) =
     isless(x.hi, y.hi) || isequal(x.hi, y.hi) && isless(x.lo, y.lo)
@@ -13,10 +13,62 @@ Base.one(x::TwicePrecision) = typeof(x)(one(x.hi))
 Base.signbit(x::TwicePrecision) = iszero(x.hi) ? signbit(x.lo) : signbit(x.hi)
 Base.isinteger(x::TwicePrecision) = isinteger(x.hi) & isinteger(x.lo)
 
-Base.nextfloat(x::TwicePrecision, k::Integer=1) =
-    TwicePrecision(canonicalize2(x.hi, nextfloat(x.lo, k))...)
-Base.prevfloat(x::TwicePrecision, k::Integer=1) =
-    TwicePrecision(canonicalize2(x.hi, prevfloat(x.lo, k))...)
+function Base.nextfloat(x::TwicePrecision)
+    lo = nextfloat(x.lo)
+    x.hi + lo == x.hi && return TwicePrecision(x.hi, lo)
+    y = TwicePrecision(canonicalize2(x.hi, lo)...)
+    lo = prevfloat(y.lo)
+    y.hi + lo == y.hi && return TwicePrecision(y.hi, lo)
+    return y
+end
+
+function Base.prevfloat(x::TwicePrecision)
+    lo = prevfloat(x.lo)
+    x.hi + lo == x.hi && return TwicePrecision(x.hi, lo)
+    y = TwicePrecision(canonicalize2(x.hi, lo)...)
+    lo = nextfloat(y.lo)
+    y.hi + lo == y.hi && return TwicePrecision(y.hi, lo)
+    return y
+end
+
+# more accurate twice precision addition
+# based on "Bailey’s QD library": https://www.davidhbailey.com/dhbsoftware/
+# via https://mycourses.aalto.fi/pluginfile.php/926578/mod_resource/content/1/9781489979810-c2.pdf (Algorithm 6)
+function Base.:(+)(x::TwicePrecision{T}, y::TwicePrecision{T}) where T
+    s_hi, s_lo = add12(x.hi, y.hi)
+    t_hi, t_lo = add12(x.lo, y.lo)
+    c = s_lo + t_hi
+    v_hi, v_lo = canonicalize2(s_hi, c)
+    w = t_lo + v_lo
+    return TwicePrecision(canonicalize2(v_hi, w)...)
+end
+
+# more accurate twice precision division
+# based on "Bailey’s QD library": https://www.davidhbailey.com/dhbsoftware/
+function Base.:(/)(x::TwicePrecision{T}, y::TwicePrecision{T}) where T
+    q1 = x.hi/y.hi
+    r = x - q1*y
+    q2 = r.hi/y.hi
+    r -= q2*y
+    q3 = r.hi/y.hi
+    r = TwicePrecision(canonicalize2(q1, q2)...)
+    r += TwicePrecision(q3)
+end
+
+normalize⁺(x::AbstractFloat) =
+    !issubnormal(x) ? x : signbit(x) ? -zero(x) : floatmin(x)
+normalize⁻(x::AbstractFloat) =
+    !issubnormal(x) ? x : signbit(x) ? -floatmin(x) : zero(x)
+
+function normalize⁺(x::TwicePrecision{T}) where {T<:AbstractFloat}
+    issubnormal(x.hi) ? TwicePrecision(normalize⁺(x.hi)) :
+    issubnormal(x.lo) ? TwicePrecision(canonicalize2(x.hi, normalize⁺(x.lo))) : x
+end
+
+function normalize⁻(x::TwicePrecision{T}) where {T<:AbstractFloat}
+    issubnormal(x.hi) ? TwicePrecision(normalize⁻(x.hi)) :
+    issubnormal(x.lo) ? TwicePrecision(canonicalize2(x.hi, normalize⁻(x.lo))) : x
+end
 
 function Base.round(
     x::TwicePrecision{<:AbstractFloat},
@@ -104,8 +156,8 @@ function simplest_rational_core(
 
     @assert 𝟘 < lo ≤ hi
 
-    s, t = ratio(lo)
-    u, v = ratio(hi)
+    s, t = ratio(normalize⁺(lo))
+    u, v = ratio(normalize⁻(hi))
 
     a = d = 𝟙
     b = c = 𝟘
@@ -159,7 +211,7 @@ end
 function ival(x::T) where {T<:AbstractFloat}
     lo = (TwicePrecision(x) + TwicePrecision(prevfloat(x)))/2
     hi = (TwicePrecision(x) + TwicePrecision(nextfloat(x)))/2
-    lo, hi
+    return lo, hi
 end
 
 """
@@ -167,43 +219,14 @@ end
 
 Return a `TwicePrecision` value `r` such that:
 
-    - `typeof(x, y*prevfloat(r)) == x`
-    - `typeof(x, y*nextfloat(r)) != x`
+    - `oftype(x, y*r) == x`
+    - `oftype(x, y*nextfloat(r)) != x`
 
 Inputs can be floats or `TwicePrecision` floats.
 """
-function ratio_break⁺(x::T, y::T) where {T<:AbstractFloat}
-    x⁻ = x
-    if signbit(y)
-        x⁻, y = -x⁻, -y
-    end
-    x⁺ = nextfloat(x⁻)
-    h = 0.5*(x⁻/y + x⁺/y)
-    l = 0.5*(fma(-y, h, x⁻) + fma(-y, h, x⁺))/y
-    while true
-        if fma(y, h, y*l) ≤ x⁻
-            while fma(y, h, y*l) ≤ x⁻
-                l = nextfloat(l)
-            end
-            l = prevfloat(l)
-        else
-            while fma(y, h, y*l) ≥ x⁺
-                l = prevfloat(l)
-            end
-            l = nextfloat(l)
-        end
-        h + l == h && break # canonical
-        h, l = canonicalize2(h, l)
-    end
-    @assert (h, l) == canonicalize2(h, l)
-    @assert fma(y, h, y*prevfloat(l)) == x⁻
-    @assert fma(y, h, y*nextfloat(l)) == x⁺
-    r = TwicePrecision(h, l)
-end
-
 function ratio_break⁺(
-    x::TwicePrecision{T},
-    y::TwicePrecision{T},
+    x :: TwicePrecision{T},
+    y :: TwicePrecision{T},
 ) where {T<:AbstractFloat}
     if signbit(y)
         x, y = -x, -y
@@ -215,8 +238,19 @@ function ratio_break⁺(
     while r*y > x
         r = prevfloat(r)
     end
-    @assert r*y == x
-    @assert nextfloat(r)*y > x
+    @assert y*r ≤ x
+    @assert y*nextfloat(r) > x
+    return r
+end
+
+function ratio_break⁺(x::T, y::T) where {T<:AbstractFloat}
+    x⁺ = (TwicePrecision(x) + TwicePrecision(nextfloat(x)))/2
+    T(x⁺) ≠ x && (x⁺ = prevfloat(x⁺))
+    @assert T(x⁺) == x
+    @assert T(nextfloat(x⁺)) == nextfloat(x)
+    r = ratio_break⁺(x⁺, TwicePrecision(y))
+    @assert T(y*r) == x
+    @assert T(y*nextfloat(r)) != x
     return r
 end
 
@@ -225,18 +259,11 @@ end
 
 Return a `TwicePrecision` value `r` such that:
 
-    - `typeof(x, y*prevfloat(r)) != x`
-    - `typeof(x, y*nextfloat(r)) == x`
+    - `oftype(x, y*r) == x`
+    - `oftype(x, y*prevfloat(r)) != x`
 
 Inputs can be floats or `TwicePrecision` floats.
 """
-function ratio_break⁻(x::T, y::T) where {T<:AbstractFloat}
-    if signbit(y)
-        x, y = -x, -y
-    end
-    ratio_break⁺(prevfloat(x), y)
-end
-
 function ratio_break⁻(
     x::TwicePrecision{T},
     y::TwicePrecision{T},
@@ -251,8 +278,19 @@ function ratio_break⁻(
     while r*y < x
         r = nextfloat(r)
     end
-    @assert r*y == x
-    @assert prevfloat(r)*y < x
+    @assert y*r ≤ x
+    @assert y*prevfloat(r) < x
+    return r
+end
+
+function ratio_break⁻(x::T, y::T) where {T<:AbstractFloat}
+    x⁻ = (TwicePrecision(x) + TwicePrecision(prevfloat(x)))/2
+    T(x⁻) ≠ x && (x⁻ = nextfloat(x⁻))
+    @assert T(x⁻) == x
+    @assert T(prevfloat(x⁻)) == prevfloat(x)
+    r = ratio_break⁻(x⁻, TwicePrecision(y))
+    @assert T(y*r) == x
+    @assert T(y*prevfloat(r)) != x
     return r
 end
 
