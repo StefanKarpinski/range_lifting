@@ -244,6 +244,9 @@ function ratio_break⁺(
 end
 
 function ratio_break⁺(x::T, y::T) where {T<:AbstractFloat}
+    if signbit(y)
+        x, y = -x, -y
+    end
     x⁺ = (TwicePrecision(x) + TwicePrecision(nextfloat(x)))/2
     T(x⁺) ≠ x && (x⁺ = prevfloat(x⁺))
     @assert T(x⁺) == x
@@ -278,12 +281,15 @@ function ratio_break⁻(
     while r*y < x
         r = nextfloat(r)
     end
-    @assert y*r ≤ x
+    @assert y*r ≥ x
     @assert y*prevfloat(r) < x
     return r
 end
 
 function ratio_break⁻(x::T, y::T) where {T<:AbstractFloat}
+    if signbit(y)
+        x, y = -x, -y
+    end
     x⁻ = (TwicePrecision(x) + TwicePrecision(prevfloat(x)))/2
     T(x⁻) ≠ x && (x⁻ = nextfloat(x⁻))
     @assert T(x⁻) == x
