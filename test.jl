@@ -28,6 +28,9 @@ end
 @example "-1e18", 3, "2e19", 10, 0
 @example "-1e15", 9, "8e16", 10, 0
 
+# FIXME:
+# @example 0, 15, 42000, 100, 0
+
 @testset "tests" begin
     T = Float64
     for (A, S, B, D, x) in examples
@@ -44,10 +47,11 @@ end
         l ≤ typemax(Int) || continue
         @test length(r) == l
         @test r[l] == b
-        # i = searchsortedfirst(R, 0)
-        # for j = i-10:i+10
-        #     1 ≤ j ≤ l || continue
-        #     @test r[j] ≈ T(R[j]/D + x) atol=eps(x)
-        # end
+        i = searchsortedfirst(R, 0)
+        for j = i-10:i+10
+            1 ≤ j ≤ l || continue
+            # must be exact when x == 0
+            @test r[j] - T(R[j]/D) ≈ x
+        end
     end
 end
