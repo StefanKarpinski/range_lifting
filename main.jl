@@ -40,7 +40,7 @@ function Base.:(+)(x::TwicePrecision{T}, y::TwicePrecision{T}) where T
     c = s_lo + t_hi
     v_hi, v_lo = canonicalize2(s_hi, c)
     w = t_lo + v_lo
-    return TwicePrecision(canonicalize2(v_hi, w)...)
+    TwicePrecision(canonicalize2(v_hi, w)...)
 end
 
 # more accurate twice precision division
@@ -51,8 +51,7 @@ function Base.:(/)(x::TwicePrecision{T}, y::TwicePrecision{T}) where T
     q2 = r.hi/y.hi
     r -= q2*y
     q3 = r.hi/y.hi
-    r = TwicePrecision(canonicalize2(q1, q2)...)
-    r += TwicePrecision(q3)
+    TwicePrecision(canonicalize2(q1, q2)...) + TwicePrecision(q3)
 end
 
 normalize⁺(x::AbstractFloat) =
@@ -247,6 +246,7 @@ function ratio_break⁺(x::T, y::T) where {T<:AbstractFloat}
     if signbit(y)
         x, y = -x, -y
     end
+    # find largest double precision x⁺ such that T(x⁺) == x
     x⁺ = (TwicePrecision(x) + TwicePrecision(nextfloat(x)))/2
     T(x⁺) ≠ x && (x⁺ = prevfloat(x⁺))
     @assert T(x⁺) == x
@@ -290,6 +290,7 @@ function ratio_break⁻(x::T, y::T) where {T<:AbstractFloat}
     if signbit(y)
         x, y = -x, -y
     end
+    # find smallest double precision x⁻ such that T(x⁻) == x
     x⁻ = (TwicePrecision(x) + TwicePrecision(prevfloat(x)))/2
     T(x⁻) ≠ x && (x⁻ = nextfloat(x⁻))
     @assert T(x⁻) == x
@@ -324,6 +325,12 @@ Base.last(r::FRange) = eltype(r)((r.n*r.d + r.c)*r.g)
 Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
     T((TwicePrecision{T}(i-1)*r.d + r.c)*r.g)
 
+# Find simple integers for length n and integers (c, d, e) such that:
+#
+#   c/d ∈ [a]/[s]
+#   e/d ∈ [b]/[s]
+#   c/e ∈ [a]/[b]
+#
 function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     # handle negative step
     if signbit(s)
@@ -470,9 +477,6 @@ end
 function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     # find the relative grid ratios
     n, c, d, e = range_ratios(a, s, b)
-    # integers such that:
-    #  - c = d*a/s
-    #  - e = d*b/s
     # still need rational value g:
     #  - g = s/d = a/c = b/e
     # get double precision bounds on g:
