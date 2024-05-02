@@ -59,15 +59,14 @@ normalize⁺(x::AbstractFloat) =
 normalize⁻(x::AbstractFloat) =
     !issubnormal(x) ? x : signbit(x) ? -floatmin(x) : zero(x)
 
-function normalize⁺(x::TwicePrecision{T}) where {T<:AbstractFloat}
+normalize⁺(x::TwicePrecision{T}) where {T<:AbstractFloat} =
     issubnormal(x.hi) ? TwicePrecision(normalize⁺(x.hi)) :
-    issubnormal(x.lo) ? TwicePrecision(canonicalize2(x.hi, normalize⁺(x.lo))) : x
-end
-
-function normalize⁻(x::TwicePrecision{T}) where {T<:AbstractFloat}
+    issubnormal(x.lo) ?
+        TwicePrecision(canonicalize2(x.hi, normalize⁺(x.lo))...) : x
+normalize⁻(x::TwicePrecision{T}) where {T<:AbstractFloat} =
     issubnormal(x.hi) ? TwicePrecision(normalize⁻(x.hi)) :
-    issubnormal(x.lo) ? TwicePrecision(canonicalize2(x.hi, normalize⁻(x.lo))) : x
-end
+    issubnormal(x.lo) ?
+        TwicePrecision(canonicalize2(x.hi, normalize⁻(x.lo))...) : x
 
 function Base.round(
     x::TwicePrecision{<:AbstractFloat},
@@ -230,13 +229,25 @@ function ratio_break⁺(
     if signbit(y)
         x, y = -x, -y
     end
-    r = x/y
-    while r*y ≤ x
+    iszero(x) && return x
+    r⁻ = TwicePrecision(prevfloat(T(x))/nextfloat(T(y)))
+    r⁺ = TwicePrecision(nextfloat(T(x))/prevfloat(T(y)))
+    @assert r⁻*y ≤ x < r⁺*y
+    while true
+        r = (r⁻ + r⁺)/2
+        r⁻ < r < r⁺ || break
+        x′ = r*y
+        if x′ ≤ x
+            r⁻ = r
+        else
+            r⁺ = r
+        end
+    end
+    r = r⁻
+    while y*r ≤ x
         r = nextfloat(r)
     end
-    while r*y > x
-        r = prevfloat(r)
-    end
+    r = prevfloat(r)
     @assert y*r ≤ x
     @assert y*nextfloat(r) > x
     return r
@@ -274,13 +285,25 @@ function ratio_break⁻(
     if signbit(y)
         x, y = -x, -y
     end
-    r = x/y
-    while r*y ≥ x
+    iszero(x) && return x
+    r⁻ = TwicePrecision(prevfloat(T(x))/nextfloat(T(y)))
+    r⁺ = TwicePrecision(nextfloat(T(x))/prevfloat(T(y)))
+    @assert r⁻*y < x ≤ r⁺*y
+    while true
+        r = (r⁻ + r⁺)/2
+        r⁻ < r < r⁺ || break
+        x′ = r*y
+        if x′ < x
+            r⁻ = r
+        else
+            r⁺ = r
+        end
+    end
+    r = r⁺
+    while y*r ≥ x
         r = prevfloat(r)
     end
-    while r*y < x
-        r = nextfloat(r)
-    end
+    r = nextfloat(r)
     @assert y*r ≥ x
     @assert y*prevfloat(r) < x
     return r
@@ -332,6 +355,7 @@ Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
 #   c/e ∈ [a]/[b]
 #
 function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
+    # TODO: handle zero end-point cases
     # handle negative step
     if signbit(s)
         n, c, d, e = range_ratios(b, -s, a)

@@ -56,7 +56,7 @@ end
 @testset "tests" begin
     T = Float64
     for (A, S, B, D, x) in examples
-        @show (A, S, B, D, x)
+        # @show (A, S, B, D, x)
         (a, s, b) = map(T, (A/D + x, S/D, B/D + x))
         r = lift_range(a, s, b)
         R = A:S:B
@@ -72,7 +72,7 @@ end
         i = searchsortedfirst(R, 0)
         for j = i-10:i+10
             1 ≤ j ≤ l || continue
-            # must be exact when x == 0
+            # comparison is exact at zero
             @test r[j] - T(R[j]/D) ≈ x
         end
     end
