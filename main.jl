@@ -508,6 +508,12 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
 end
 
 function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
+    # normalize the range
+    if any(issubnormal, (a, s, b))
+        ε = eps(zero(T))
+        r = lift_range(a/ε, s/ε, b/ε)
+        return FRange(r.c, r.d, r.n, r.g*ε)
+    end
     # find the relative grid ratios
     n, c, d, e = range_ratios(a, s, b)
     # still need rational value g:
@@ -518,7 +524,7 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     lo_b, hi_b = ratio_ival(b, e)
     lo = max(lo_a, lo_s, lo_b)
     hi = min(hi_a, hi_s, hi_b)
-    @assert lo ≤ hi # otherwise can't work
+    lo ≤ hi || error("end-point can't be hit (grid unit)")
     num, den = simplest_rational(lo, hi)
     g = num/den
     @assert lo ≤ g ≤ hi

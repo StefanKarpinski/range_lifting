@@ -60,6 +60,14 @@ end
 @example "-1e15", "9", "8e16", "1e16", 0
 @example "-1e15", "9", "8e16", "1e17", 0
 
+# subnormal ranges
+@example -10, 5, 15, "1e324", 0
+@example   0, 5, 15, "1e324", 0
+@example -15, 5,  0, "1e324", 0
+
+# TODO (broken):
+# @example 3, 2, 19, "1e310", 0.0
+
 @testset "tests" begin
     T = Float64
     for (A, S, B, D, x) in examples
