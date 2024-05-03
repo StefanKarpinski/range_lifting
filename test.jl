@@ -68,6 +68,9 @@ end
 # TODO (broken):
 # @example 3, 2, 19, "1e310", 0.0
 
+# TODO (broken):
+# lift_range(-floatmax(T), floatmax(T)/10, floatmax(T))
+
 @testset "tests" begin
     T = Float64
     for (A, S, B, D, x) in examples
