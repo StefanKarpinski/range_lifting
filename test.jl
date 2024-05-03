@@ -23,6 +23,16 @@ for x in shifts, a in [3, 1, -1, -3]
     @example a, 2, 19, 10, x
 end
 
+@example -1, 1, 0, 10, 0
+@example -2, 1, 0, 10, 0
+@example -3, 1, 0, 10, 0
+@example -19, 1, 0, 10, 0
+@example 0, 1, 1, 10, 0
+@example 0, 1, 2, 10, 0
+@example 0, 1, 3, 10, 0
+@example 0, 1, 19, 10, 0
+@example 0, 15, 42000, 100, 0
+
 @example  "-3e50", "1e50", "4e50", 1, 0
 @example  "-3e50", "1e50", "4e50", "1e25", 0
 @example  "-3e50", "1e50", "4e50", "1e50", 0
@@ -49,9 +59,6 @@ end
 @example "-1e15", "9", "8e16", "1e15", 0
 @example "-1e15", "9", "8e16", "1e16", 0
 @example "-1e15", "9", "8e16", "1e17", 0
-
-# FIXME:
-# @example 0, 15, 42000, 100, 0
 
 @testset "tests" begin
     T = Float64

@@ -13,6 +13,9 @@ Base.one(x::TwicePrecision) = typeof(x)(one(x.hi))
 Base.signbit(x::TwicePrecision) = iszero(x.hi) ? signbit(x.lo) : signbit(x.hi)
 Base.isinteger(x::TwicePrecision) = isinteger(x.hi) & isinteger(x.lo)
 
+Base.floatmax(x::TwicePrecision{T}) where {T<:AbstractFloat} =
+    TwicePrecision(floatmax(T), ldexp(floatmax(T), -precision(T)-1))
+
 function Base.nextfloat(x::TwicePrecision)
     lo = nextfloat(x.lo)
     x.hi + lo == x.hi && return TwicePrecision(x.hi, lo)
@@ -91,7 +94,7 @@ function Base.div(
     a::TwicePrecision{T},
     b::TwicePrecision{T},
     R::RoundingMode,
-) where {T}
+) where {T<:AbstractFloat}
     round(a/b, R)
 end
 
@@ -229,6 +232,7 @@ function ratio_break⁺(
     if signbit(y)
         x, y = -x, -y
     end
+    iszero(y) && return floatmax(x)
     iszero(x) && return x
     r⁻ = TwicePrecision(prevfloat(T(x))/nextfloat(T(y)))
     r⁺ = TwicePrecision(nextfloat(T(x))/prevfloat(T(y)))
@@ -263,7 +267,7 @@ function ratio_break⁺(x::T, y::T) where {T<:AbstractFloat}
     @assert T(x⁺) == x
     @assert T(nextfloat(x⁺)) == nextfloat(x)
     r = ratio_break⁺(x⁺, TwicePrecision(y))
-    @assert T(y*r) == x
+    @assert iszero(y) || T(y*r) == x
     @assert T(y*nextfloat(r)) != x
     return r
 end
@@ -285,6 +289,7 @@ function ratio_break⁻(
     if signbit(y)
         x, y = -x, -y
     end
+    iszero(y) && return -floatmax(x)
     iszero(x) && return x
     r⁻ = TwicePrecision(prevfloat(T(x))/nextfloat(T(y)))
     r⁺ = TwicePrecision(nextfloat(T(x))/prevfloat(T(y)))
@@ -319,7 +324,7 @@ function ratio_break⁻(x::T, y::T) where {T<:AbstractFloat}
     @assert T(x⁻) == x
     @assert T(prevfloat(x⁻)) == prevfloat(x)
     r = ratio_break⁻(x⁻, TwicePrecision(y))
-    @assert T(y*r) == x
+    @assert iszero(y) || T(y*r) == x
     @assert T(y*prevfloat(r)) != x
     return r
 end
@@ -329,7 +334,7 @@ end
 
 Shorthand for `ratio_break⁻(x, y), ratio_break⁺(x, y)`.
 """
-function ratio_ival(x::T, y::T) where {T}
+function ratio_ival(x::T, y::T) where {T<:AbstractFloat}
     ratio_break⁻(x, y), ratio_break⁺(x, y)
 end
 
@@ -355,7 +360,6 @@ Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
 #   c/e ∈ [a]/[b]
 #
 function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
-    # TODO: handle zero end-point cases
     # handle negative step
     if signbit(s)
         n, c, d, e = range_ratios(b, -s, a)
@@ -425,44 +429,49 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
             changed = true
         end
         # shrink [a] based on ratios
-        if r_a⁻ < r_b⁻ * r_ab⁻
-            r_a⁻ = r_b⁻ * r_ab⁻
-            if !signbit(a)
-                sr_a⁻ = r_a⁻
-            else
-                sr_a⁺ = -r_a⁻
+        if !iszero(b)
+            if r_a⁻ < r_b⁻ * r_ab⁻
+                r_a⁻ = r_b⁻ * r_ab⁻
+                if !signbit(a)
+                    sr_a⁻ = r_a⁻
+                else
+                    sr_a⁺ = -r_a⁻
+                end
+                changed = true
             end
-            changed = true
-        end
-        if r_a⁺ > r_b⁺ * r_ab⁺
-            r_a⁺ = r_b⁺ * r_ab⁺
-            if !signbit(a)
-                sr_a⁺ = r_a⁺
-            else
-                sr_a⁻ = -r_a⁺
+            if r_a⁺ > r_b⁺ * r_ab⁺
+                r_a⁺ = r_b⁺ * r_ab⁺
+                if !signbit(a)
+                    sr_a⁺ = r_a⁺
+                else
+                    sr_a⁻ = -r_a⁺
+                end
+                changed = true
             end
-            changed = true
         end
         # shrink [b] based on ratios
-        if r_b⁻ < r_a⁻ * r_ba⁻
-            r_b⁻ = r_a⁻ * r_ba⁻
-            if !signbit(b)
-                sr_b⁻ = r_b⁻
-            else
-                sr_b⁺ = -r_b⁻
+        if !iszero(a)
+            if r_b⁻ < r_a⁻ * r_ba⁻
+                r_b⁻ = r_a⁻ * r_ba⁻
+                if !signbit(b)
+                    sr_b⁻ = r_b⁻
+                else
+                    sr_b⁺ = -r_b⁻
+                end
+                changed = true
             end
-            changed = true
-        end
-        if r_b⁺ > r_a⁺ * r_ba⁺
-            r_b⁺ = r_a⁺ * r_ba⁺
-            if !signbit(b)
-                sr_b⁺ = r_b⁺
-            else
-                sr_b⁻ = -r_b⁺
+            if r_b⁺ > r_a⁺ * r_ba⁺
+                r_b⁺ = r_a⁺ * r_ba⁺
+                if !signbit(b)
+                    sr_b⁺ = r_b⁺
+                else
+                    sr_b⁻ = -r_b⁺
+                end
+                changed = true
             end
-            changed = true
         end
-        changed || break
+        # stop if unchanged
+        !changed && break
     end
     # find common fraction interval
     f⁻, f⁺ = abs(a) ≤ abs(b) ? (sr_a⁻, sr_a⁺) : (sr_b⁻, sr_b⁺)
