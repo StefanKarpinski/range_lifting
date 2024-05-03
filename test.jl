@@ -23,14 +23,31 @@ for x in shifts, a in [3, 1, -1, -3]
     @example a, 2, 19, 10, x
 end
 
-@example -1, 1, 0, 10, 0
-@example -2, 1, 0, 10, 0
-@example -3, 1, 0, 10, 0
-@example -19, 1, 0, 10, 0
-@example 0, 1, 1, 10, 0
-@example 0, 1, 2, 10, 0
-@example 0, 1, 3, 10, 0
-@example 0, 1, 19, 10, 0
+for x in shifts[1], d = 1:1000
+    @example  -1,   1,   0, d, x
+    @example  -2,   1,   0, d, x
+    @example  -3,   1,   0, d, x
+    @example -19,   1,   0, d, x
+    @example   0,   1,   1, d, x
+    @example   0,   1,   2, d, x
+    @example   0,   1,   3, d, x
+    @example   0,   1,  19, d, x
+
+    @example   1,   1,   3, d, x
+    @example   0,   1,   3, d, x
+    @example   3,  -1,  -1, d, x
+    @example   1,  -1,  -3, d, x
+    @example   0,   1,  10, d, x
+    @example   0,   7,  21, d, x
+    @example   0,  11,  33, d, x
+    @example   1,  11,  34, d, x
+    @example   0,  13,  39, d, x
+    @example   1,  13,  40, d, x
+    @example  11,  11,  33, d, x
+    @example   3,   1,  11, d, x
+    @example   0,   1,   5, d, x
+end
+
 @example 0, 15, 42000, 100, 0
 
 @example  "-3e50", "1e50", "4e50", 1, 0
@@ -79,7 +96,7 @@ end
         r = lift_range(a, s, b)
         R = A:S:B
         l = length(R)
-        @test r.n == l-1
+        @test max(-1, r.n) == l-1
         @test first(r) == a
         @test step(r) == s
         @test last(r) == b

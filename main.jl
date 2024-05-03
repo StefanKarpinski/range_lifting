@@ -1,4 +1,4 @@
-import Base: TwicePrecision, canonicalize2, add12, div12
+import Base: TwicePrecision, canonicalize2, add12, div12, mul12
 
 Base.isless(x::TwicePrecision, y::TwicePrecision) =
     isless(x.hi, y.hi) || isequal(x.hi, y.hi) && isless(x.lo, y.lo)
@@ -234,8 +234,14 @@ function ratio_break⁺(
     end
     iszero(y) && return floatmax(x)
     iszero(x) && return x
-    r⁻ = TwicePrecision(prevfloat(T(x))/nextfloat(T(y)))
-    r⁺ = TwicePrecision(nextfloat(T(x))/prevfloat(T(y)))
+    r = x/y
+    if r*y ≤ x
+        r⁻ = r
+        r⁺ = max(nextfloat(r), TwicePrecision(nextfloat(x.hi))/y)
+    else
+        r⁻ = min(prevfloat(r), TwicePrecision(prevfloat(x.hi))/y)
+        r⁺ = r
+    end
     @assert r⁻*y ≤ x < r⁺*y
     while true
         r = (r⁻ + r⁺)/2
@@ -291,8 +297,14 @@ function ratio_break⁻(
     end
     iszero(y) && return -floatmax(x)
     iszero(x) && return x
-    r⁻ = TwicePrecision(prevfloat(T(x))/nextfloat(T(y)))
-    r⁺ = TwicePrecision(nextfloat(T(x))/prevfloat(T(y)))
+    r = x/y
+    if r*y < x
+        r⁻ = r
+        r⁺ = max(nextfloat(r), TwicePrecision(nextfloat(x.hi))/y)
+    else
+        r⁻ = min(prevfloat(r), TwicePrecision(prevfloat(x.hi))/y)
+        r⁺ = r
+    end
     @assert r⁻*y < x ≤ r⁺*y
     while true
         r = (r⁻ + r⁺)/2
@@ -345,7 +357,7 @@ struct FRange{T<:AbstractFloat} <: AbstractRange{T}
     g::TwicePrecision{T}
 end
 
-Base.length(r::FRange) = Int(r.n) + 1
+Base.length(r::FRange) = max(0, Int(r.n) + 1)
 Base.first(r::FRange) = r[1]
 Base.step(r::FRange) = tmul(r.d, r.g)
 Base.last(r::FRange) = eltype(r)((r.n*r.d + r.c)*r.g)
@@ -355,6 +367,7 @@ Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
 
 # Find simple integers for length n and integers (c, d, e) such that:
 #
+#   n = (e - c)/d
 #   c/d ∈ [a]/[s]
 #   e/d ∈ [b]/[s]
 #   c/e ∈ [a]/[b]
@@ -362,8 +375,9 @@ Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
 function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     # handle negative step
     if signbit(s)
-        n, c, d, e = range_ratios(b, -s, a)
-        return n, e, d, c
+        a = -a
+        s = -s
+        b = -b
     end
     # double precision intervals for a, s, b
     a⁻, a⁺ = ival(abs(a))
