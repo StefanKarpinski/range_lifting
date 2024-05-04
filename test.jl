@@ -23,7 +23,7 @@ for x in shifts, a in [3, 1, -1, -3]
     @example a, 2, 19, 10, x
 end
 
-for x in shifts[1], d = 1:1000
+for x in shifts[1:2], d = 1:1000
     @example  -1,   1,   0, d, x
     @example  -2,   1,   0, d, x
     @example  -3,   1,   0, d, x
@@ -91,7 +91,7 @@ end
 @testset "tests" begin
     T = Float64
     for (A, S, B, D, x) in examples
-        # @show (A, S, B, D, x)
+        @show (A, S, B, D, x)
         (a, s, b) = map(T, (A/D + x, S/D, B/D + x))
         r = lift_range(a, s, b)
         R = A:S:B
