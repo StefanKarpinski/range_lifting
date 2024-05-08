@@ -365,6 +365,24 @@ Base.last(r::FRange) = eltype(r)((r.n*r.d + r.c)*r.g)
 Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
     T((TwicePrecision{T}(i-1)*r.d + r.c)*r.g)
 
+macro update(cmp::Expr, body::Expr=quote end)
+    cmp.head == :call &&
+    length(cmp.args) == 3 &&
+    cmp.args[1] in (:<, :>) &&
+    cmp.args[2] isa Symbol
+    lt = esc(cmp.args[1])
+    var = esc(cmp.args[2])
+    val = esc(cmp.args[3])
+    quote
+        val = $val
+        if $lt($var, val)
+            $var = val
+            $(esc(body))
+            $(esc(:changed)) = true
+        end
+    end
+end
+
 # Find simple integers for length n and integers (c, d, e) such that:
 #
 #   n = (e - c)/d
@@ -405,87 +423,76 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     while true
         changed = false
         # shrink [a] based on length
-        if sr_a⁻ < sr_b⁻ - n
-            sr_a⁻ = sr_b⁻ - n
+        @update sr_a⁻ < sr_b⁻ - n begin
             if !signbit(a)
                 r_a⁻ = sr_a⁻
             else
                 r_a⁺ = -sr_a⁻
             end
-            changed = true
         end
-        if sr_a⁺ > sr_b⁺ - n
-            sr_a⁺ = sr_b⁺ - n
+        @update sr_a⁺ > sr_b⁺ - n begin
             if !signbit(a)
                 r_a⁺ = sr_a⁺
             else
                 r_a⁻ = -sr_a⁺
             end
-            changed = true
         end
         # shrink [b] based on length
-        if sr_b⁻ < sr_a⁻ + n
-            sr_b⁻ = sr_a⁻ + n
+        @update sr_b⁻ < sr_a⁻ + n begin
             if !signbit(b)
                 r_b⁻ = sr_b⁻
             else
                 r_b⁺ = -sr_b⁻
             end
-            changed = true
         end
-        if sr_b⁺ > sr_a⁺ + n
-            sr_b⁺ = sr_a⁺ + n
+        @update sr_b⁺ > sr_a⁺ + n begin
             if !signbit(b)
                 r_b⁺ = sr_b⁺
             else
                 r_b⁻ = -sr_b⁺
             end
-            changed = true
         end
         # shrink [a] based on ratios
         if !iszero(b)
-            if r_a⁻ < r_b⁻ * r_ab⁻
-                r_a⁻ = r_b⁻ * r_ab⁻
+            @update r_a⁻ < r_b⁻ * r_ab⁻ begin
                 if !signbit(a)
                     sr_a⁻ = r_a⁻
                 else
                     sr_a⁺ = -r_a⁻
                 end
-                changed = true
             end
-            if r_a⁺ > r_b⁺ * r_ab⁺
-                r_a⁺ = r_b⁺ * r_ab⁺
+            @update r_a⁺ > r_b⁺ * r_ab⁺ begin
                 if !signbit(a)
                     sr_a⁺ = r_a⁺
                 else
                     sr_a⁻ = -r_a⁺
                 end
-                changed = true
             end
         end
         # shrink [b] based on ratios
         if !iszero(a)
-            if r_b⁻ < r_a⁻ * r_ba⁻
-                r_b⁻ = r_a⁻ * r_ba⁻
+            @update r_b⁻ < r_a⁻ * r_ba⁻ begin
                 if !signbit(b)
                     sr_b⁻ = r_b⁻
                 else
                     sr_b⁺ = -r_b⁻
                 end
-                changed = true
             end
-            if r_b⁺ > r_a⁺ * r_ba⁺
-                r_b⁺ = r_a⁺ * r_ba⁺
+            @update r_b⁺ > r_a⁺ * r_ba⁺ begin
                 if !signbit(b)
                     sr_b⁺ = r_b⁺
                 else
                     sr_b⁻ = -r_b⁺
                 end
-                changed = true
             end
         end
         # stop if unchanged
         !changed && break
+        # update ratios too
+        @update r_ab⁻ < r_a⁻/r_b⁺
+        @update r_ab⁺ > r_a⁺/r_b⁻
+        @update r_ba⁻ < r_b⁻/r_a⁺
+        @update r_ba⁺ > r_b⁺/r_a⁻
     end
     # find fraction interval based on [a]
     f_a⁻, f_a⁺ = sr_a⁻, sr_a⁺
