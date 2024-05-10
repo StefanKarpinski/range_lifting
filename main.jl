@@ -449,28 +449,28 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
         # identity: r_b == r_a + n
         @update r_b⁻ < r_a⁻ + n
         @update r_b⁺ > r_a⁺ + n
-        # identity: r_a == n/(r_ba - 1)
         if !iszero(a)
+            # identity: r_a == n/(r_ba - 1)
             @update r_a⁻ < n/(r_ba⁺ - 1)
             @update r_a⁺ > n/(r_ba⁻ - 1)
+            # identity: r_ba = 1 + n/r_a
+            @update r_ba⁻ < 1 + n/r_a⁺
+            @update r_ba⁺ > 1 + n/r_a⁻
+            # identity: r_ab = 1/r_ba
+            @update r_ab⁻ < inv(r_ba⁺)
+            @update r_ab⁺ > inv(r_ba⁻)
         end
-        # identity: r_b == n/(1 - r_ab)
         if !iszero(b)
+            # identity: r_b == n/(1 - r_ab)
             @update r_b⁻ < n/(1 - r_ab⁻)
             @update r_b⁺ > n/(1 - r_ab⁺)
+            # identity: r_ab = 1 - n/r_b
+            @update r_ab⁻ < 1 - n/r_b⁻
+            @update r_ab⁺ > 1 - n/r_b⁺
+            # identity: r_ba = 1/r_ab
+            @update r_ba⁻ < inv(r_ab⁺)
+            @update r_ba⁺ > inv(r_ab⁻)
         end
-        # identity: r_ab = 1 - n/r_b
-        @update r_ab⁻ < 1 - n/r_b⁻
-        @update r_ab⁺ > 1 - n/r_b⁺
-        # identity: r_ba = 1 + n/r_a
-        @update r_ba⁻ < 1 + n/r_a⁺
-        @update r_ba⁺ > 1 + n/r_a⁻
-        # identity: r_ab = 1/r_ba
-        @update r_ab⁻ < inv(r_ba⁺)
-        @update r_ab⁺ > inv(r_ba⁻)
-        # identity: r_ba = 1/r_ab
-        @update r_ba⁻ < inv(r_ab⁺)
-        @update r_ba⁺ > inv(r_ab⁻)
         # stop if unchanged
         !changed && break
     end
