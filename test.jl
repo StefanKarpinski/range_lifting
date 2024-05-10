@@ -23,29 +23,36 @@ for x in shifts, a in [3, 1, -1, -3]
     @example a, 2, 19, 10, x
 end
 
-for x in shifts[1:2], d = 1:1000
-    @example  -1,   1,   0, d, x
-    @example  -2,   1,   0, d, x
-    @example  -3,   1,   0, d, x
-    @example -19,   1,   0, d, x
-    @example   0,   1,   1, d, x
-    @example   0,   1,   2, d, x
-    @example   0,   1,   3, d, x
-    @example   0,   1,  19, d, x
+function base_examples(d, x)
+    @example  -1,  1,  0, d, 0
+    @example  -2,  1,  0, d, 0
+    @example  -3,  1,  0, d, 0
+    @example -19,  1,  0, d, 0
+    @example   0,  1,  1, d, 0
+    @example   0,  1,  2, d, 0
+    @example   0,  1,  3, d, 0
+    @example   0,  1, 19, d, 0
+    @example   1,  1,  3, d, 0
+    @example   0,  1,  3, d, 0
+    @example   3, -1, -1, d, 0
+    @example   1, -1, -3, d, 0
+    @example   0,  1, 10, d, 0
+    @example   0,  7, 21, d, 0
+    @example   0, 11, 33, d, 0
+    @example   1, 11, 34, d, 0
+    @example   0, 13, 39, d, 0
+    @example   1, 13, 40, d, 0
+    @example  11, 11, 33, d, 0
+    @example   3,  1, 11, d, 0
+    @example   0,  1,  5, d, 0
+end
 
-    @example   1,   1,   3, d, x
-    @example   0,   1,   3, d, x
-    @example   3,  -1,  -1, d, x
-    @example   1,  -1,  -3, d, x
-    @example   0,   1,  10, d, x
-    @example   0,   7,  21, d, x
-    @example   0,  11,  33, d, x
-    @example   1,  11,  34, d, x
-    @example   0,  13,  39, d, x
-    @example   1,  13,  40, d, x
-    @example  11,  11,  33, d, x
-    @example   3,   1,  11, d, x
-    @example   0,   1,   5, d, x
+for d = 1:1000
+    base_examples(d, 0)
+end
+
+for d = 1:100, x = shifts
+    base_examples(d, x)
 end
 
 @example 0, 15, 42000, 100, 0
