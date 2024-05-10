@@ -396,6 +396,7 @@ macro update(cmp::Expr, body::Expr=quote end)
         if $lt($var, val)
             $var = val
             $(esc(body))
+            $(esc(:changed)) = true
         end
     end
 end
@@ -440,7 +441,8 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     end
     @sign_swap a b
     # contract intervals based on identities
-    for _ = 1:8
+    for _ = 1:64
+        changed = false
         if !iszero(a)
             # identity: r_a == n/(r_ba - 1)
             @update r_a⁻ < n/(r_ba⁺ - 1) # @show r_a⁻
@@ -475,6 +477,8 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
             @update r_ba⁻ < one(T)/r_ab⁺
             @update r_ba⁺ > one(T)/r_ab⁻
         end
+        # stop if unchanged
+        !changed && break
     end
     # find fraction interval based on [a]
     f_a⁻, f_a⁺ = r_a⁻, r_a⁺
