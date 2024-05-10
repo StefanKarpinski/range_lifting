@@ -440,7 +440,7 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     end
     @sign_swap a b
     # contract intervals based on identities
-    for _ = 1:64
+    for _ = 1:8
         if !iszero(a)
             # identity: r_a == n/(r_ba - 1)
             @update r_a⁻ < n/(r_ba⁺ - 1) # @show r_a⁻
