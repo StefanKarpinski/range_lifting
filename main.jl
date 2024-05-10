@@ -440,16 +440,16 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     end
     @sign_swap a b
     # contract intervals based on identities
-    for _ = 1:2
+    for _ = 1:64
         if !iszero(a)
             # identity: r_a == n/(r_ba - 1)
-            @update r_a⁻ < ratio_break⁻(n, r_ba⁺ - 1) # @show r_a⁻
-            @update r_a⁺ > ratio_break⁺(n, r_ba⁻ - 1) # @show r_a⁺
+            @update r_a⁻ < n/(r_ba⁺ - 1) # @show r_a⁻
+            @update r_a⁺ > n/(r_ba⁻ - 1) # @show r_a⁺
         end
         if !iszero(b)
             # identity: r_b == n/(1 - r_ab)
-            @update r_b⁻ < ratio_break⁻(n, 1 - r_ab⁻) # @show r_b⁻
-            @update r_b⁺ > ratio_break⁺(n, 1 - r_ab⁺) # @show r_b⁺
+            @update r_b⁻ < n/(1 - r_ab⁻) # @show r_b⁻
+            @update r_b⁺ > n/(1 - r_ab⁺) # @show r_b⁺
         end
         for _ = 1:2
             # identity: r_a == r_b - n
@@ -464,16 +464,16 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
             @update r_ba⁻ < 1 + n/r_a⁺
             @update r_ba⁺ > 1 + n/r_a⁻
             # identity: r_ab = 1/r_ba
-            @update r_ab⁻ < inv(r_ba⁺)
-            @update r_ab⁺ > inv(r_ba⁻)
+            @update r_ab⁻ < one(T)/r_ba⁺
+            @update r_ab⁺ > one(T)/r_ba⁻
         end
         if !iszero(b)
             # identity: r_ab = 1 - n/r_b
             @update r_ab⁻ < 1 - n/r_b⁻
             @update r_ab⁺ > 1 - n/r_b⁺
             # identity: r_ba = 1/r_ab
-            @update r_ba⁻ < inv(r_ab⁺)
-            @update r_ba⁺ > inv(r_ab⁻)
+            @update r_ba⁻ < one(T)/r_ab⁺
+            @update r_ba⁺ > one(T)/r_ab⁻
         end
     end
     # find fraction interval based on [a]
