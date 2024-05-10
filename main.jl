@@ -266,7 +266,7 @@ function ratio_break⁺(
     return r
 end
 
-function ratio_break⁺(x::T, y::T) where {T<:AbstractFloat}
+function ratio_break⁺(x::T, y::Union{T,TwicePrecision{T}}) where T
     if signbit(y)
         x, y = -x, -y
     end
@@ -275,7 +275,7 @@ function ratio_break⁺(x::T, y::T) where {T<:AbstractFloat}
     T(x⁺) ≠ x && (x⁺ = prevfloat(x⁺))
     @assert T(x⁺) == x
     @assert T(nextfloat(x⁺)) == nextfloat(x)
-    r = ratio_break⁺(x⁺, TwicePrecision(y))
+    r = ratio_break⁺(x⁺, convert(TwicePrecision{T}, y))
     @assert iszero(y) || T(y*r) == x
     @assert T(y*nextfloat(r)) != x
     return r
@@ -329,7 +329,7 @@ function ratio_break⁻(
     return r
 end
 
-function ratio_break⁻(x::T, y::T) where {T<:AbstractFloat}
+function ratio_break⁻(x::T, y::Union{T,TwicePrecision{T}}) where T
     if signbit(y)
         x, y = -x, -y
     end
@@ -338,7 +338,7 @@ function ratio_break⁻(x::T, y::T) where {T<:AbstractFloat}
     T(x⁻) ≠ x && (x⁻ = nextfloat(x⁻))
     @assert T(x⁻) == x
     @assert T(prevfloat(x⁻)) == prevfloat(x)
-    r = ratio_break⁻(x⁻, TwicePrecision(y))
+    r = ratio_break⁻(x⁻, convert(TwicePrecision{T}, y))
     @assert iszero(y) || T(y*r) == x
     @assert T(y*prevfloat(r)) != x
     return r
@@ -396,7 +396,6 @@ macro update(cmp::Expr, body::Expr=quote end)
         if $lt($var, val)
             $var = val
             $(esc(body))
-            $(esc(:changed)) = true
         end
     end
 end
@@ -440,19 +439,27 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
         r_ba⁻, r_ba⁺ = -r_ba⁺, -r_ba⁻
     end
     @sign_swap a b
-    # stabilize ratio intervals with identities:
-    while true
-        changed = false
-        # identity: r_a == r_b - n
-        @update r_a⁻ < r_b⁻ - n
-        @update r_a⁺ > r_b⁺ - n
-        # identity: r_b == r_a + n
-        @update r_b⁻ < r_a⁻ + n
-        @update r_b⁺ > r_a⁺ + n
+    # contract intervals based on identities
+    for _ = 1:2
         if !iszero(a)
             # identity: r_a == n/(r_ba - 1)
-            @update r_a⁻ < n/(r_ba⁺ - 1)
-            @update r_a⁺ > n/(r_ba⁻ - 1)
+            @update r_a⁻ < ratio_break⁻(n, r_ba⁺ - 1) # @show r_a⁻
+            @update r_a⁺ > ratio_break⁺(n, r_ba⁻ - 1) # @show r_a⁺
+        end
+        if !iszero(b)
+            # identity: r_b == n/(1 - r_ab)
+            @update r_b⁻ < ratio_break⁻(n, 1 - r_ab⁻) # @show r_b⁻
+            @update r_b⁺ > ratio_break⁺(n, 1 - r_ab⁺) # @show r_b⁺
+        end
+        for _ = 1:2
+            # identity: r_a == r_b - n
+            @update r_a⁻ < r_b⁻ - n # @show r_a⁻
+            @update r_a⁺ > r_b⁺ - n # @show r_a⁺
+            # identity: r_b == r_a + n
+            @update r_b⁻ < r_a⁻ + n # @show r_b⁻
+            @update r_b⁺ > r_a⁺ + n # @show r_b⁺
+        end
+        if !iszero(a)
             # identity: r_ba = 1 + n/r_a
             @update r_ba⁻ < 1 + n/r_a⁺
             @update r_ba⁺ > 1 + n/r_a⁻
@@ -461,9 +468,6 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
             @update r_ab⁺ > inv(r_ba⁻)
         end
         if !iszero(b)
-            # identity: r_b == n/(1 - r_ab)
-            @update r_b⁻ < n/(1 - r_ab⁻)
-            @update r_b⁺ > n/(1 - r_ab⁺)
             # identity: r_ab = 1 - n/r_b
             @update r_ab⁻ < 1 - n/r_b⁻
             @update r_ab⁺ > 1 - n/r_b⁺
@@ -471,8 +475,6 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
             @update r_ba⁻ < inv(r_ab⁺)
             @update r_ba⁺ > inv(r_ab⁻)
         end
-        # stop if unchanged
-        !changed && break
     end
     # find fraction interval based on [a]
     f_a⁻, f_a⁺ = r_a⁻, r_a⁺
