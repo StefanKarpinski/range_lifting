@@ -10,6 +10,7 @@ Base.:(<)(x::TwicePrecision, y::TwicePrecision) =
 Base.zero(x::TwicePrecision) = typeof(x)(zero(x.hi))
 Base.one(x::TwicePrecision) = typeof(x)(one(x.hi))
 
+Base.inv(x::TwicePrecision) = one(x)/x
 Base.signbit(x::TwicePrecision) = iszero(x.hi) ? signbit(x.lo) : signbit(x.hi)
 Base.isinteger(x::TwicePrecision) = isinteger(x.hi) & isinteger(x.lo)
 
@@ -56,6 +57,8 @@ function Base.:(/)(x::TwicePrecision{T}, y::TwicePrecision{T}) where T
     q3 = r.hi/y.hi
     TwicePrecision(canonicalize2(q1, q2)...) + TwicePrecision(q3)
 end
+
+Base.:(/)(x::T, y::TwicePrecision{T}) where T = TwicePrecision(x)/y
 
 normalize⁺(x::AbstractFloat) =
     !issubnormal(x) ? x : signbit(x) ? -zero(x) : floatmin(x)
@@ -365,6 +368,21 @@ Base.last(r::FRange) = eltype(r)((r.n*r.d + r.c)*r.g)
 Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
     T((TwicePrecision{T}(i-1)*r.d + r.c)*r.g)
 
+macro sign_swap(syms::Symbol...)
+    blk = quote end
+    for s in syms
+        s⁻ = esc(Symbol("$(s)⁻"))
+        s⁺ = esc(Symbol("$(s)⁺"))
+        s = esc(s)
+        push!(blk.args, :(
+            if signbit($s)
+                $s⁻, $s⁺ = -$s⁺, -$s⁻
+            end
+        ))
+    end
+    blk
+end
+
 macro update(cmp::Expr, body::Expr=quote end)
     cmp.head == :call &&
     length(cmp.args) == 3 &&
@@ -398,109 +416,71 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
         b = -b
     end
     # double precision intervals for a, s, b
-    a⁻, a⁺ = ival(abs(a))
-    s⁻, s⁺ = ival(abs(s))
-    b⁻, b⁺ = ival(abs(b))
+    a⁻, a⁺ = ival(a)
+    s⁻, s⁺ = ival(s)
+    b⁻, b⁺ = ival(b)
     # end-point/step ratio intervals
-    r_a⁻ = ratio_break⁻(a⁻, s⁺)
-    r_a⁺ = ratio_break⁺(a⁺, s⁻)
-    r_b⁻ = ratio_break⁻(b⁻, s⁺)
-    r_b⁺ = ratio_break⁺(b⁺, s⁻)
-    # signed ratio intervals
-    sr_a⁻, sr_a⁺ = signbit(a) ? (-r_a⁺, -r_a⁻) : (r_a⁻, r_a⁺)
-    sr_b⁻, sr_b⁺ = signbit(b) ? (-r_b⁺, -r_b⁻) : (r_b⁻, r_b⁺)
+    r_a⁻ = ratio_break⁻(a⁻, signbit(a) ? s⁻ : s⁺)
+    r_a⁺ = ratio_break⁺(a⁺, signbit(a) ? s⁺ : s⁻)
+    r_b⁻ = ratio_break⁻(b⁻, signbit(b) ? s⁻ : s⁺)
+    r_b⁺ = ratio_break⁺(b⁺, signbit(b) ? s⁺ : s⁻)
     # pick simplest range length
-    n = T(simplest_float(sr_b⁻ - sr_a⁺, sr_b⁺ - sr_a⁻))
+    n = T(simplest_float(r_b⁻ - r_a⁺, r_b⁺ - r_a⁻))
     # check if end-point can be hit
     p = tz(n)
     p ≥ 0 || error("end-point can't be hit (length)")
     # ratio intervals between end-points
+    @sign_swap a b
     r_ab⁻ = ratio_break⁻(a⁻, b⁺)
     r_ab⁺ = ratio_break⁺(a⁺, b⁻)
     r_ba⁻ = ratio_break⁻(b⁻, a⁺)
     r_ba⁺ = ratio_break⁺(b⁺, a⁻)
-    # stabilize ratio intervals
+    if signbit(a) ⊻ signbit(b)
+        r_ab⁻, r_ab⁺ = -r_ab⁺, -r_ab⁻
+        r_ba⁻, r_ba⁺ = -r_ba⁺, -r_ba⁻
+    end
+    @sign_swap a b
+    # stabilize ratio intervals with identities:
     while true
         changed = false
-        # shrink [a] based on length
-        @update sr_a⁻ < sr_b⁻ - n begin
-            if !signbit(a)
-                r_a⁻ = sr_a⁻
-            else
-                r_a⁺ = -sr_a⁻
-            end
-        end
-        @update sr_a⁺ > sr_b⁺ - n begin
-            if !signbit(a)
-                r_a⁺ = sr_a⁺
-            else
-                r_a⁻ = -sr_a⁺
-            end
-        end
-        # shrink [b] based on length
-        @update sr_b⁻ < sr_a⁻ + n begin
-            if !signbit(b)
-                r_b⁻ = sr_b⁻
-            else
-                r_b⁺ = -sr_b⁻
-            end
-        end
-        @update sr_b⁺ > sr_a⁺ + n begin
-            if !signbit(b)
-                r_b⁺ = sr_b⁺
-            else
-                r_b⁻ = -sr_b⁺
-            end
-        end
-        # shrink [a] based on ratios
-        if !iszero(b)
-            @update r_a⁻ < r_b⁻ * r_ab⁻ begin
-                if !signbit(a)
-                    sr_a⁻ = r_a⁻
-                else
-                    sr_a⁺ = -r_a⁻
-                end
-            end
-            @update r_a⁺ > r_b⁺ * r_ab⁺ begin
-                if !signbit(a)
-                    sr_a⁺ = r_a⁺
-                else
-                    sr_a⁻ = -r_a⁺
-                end
-            end
-        end
-        # shrink [b] based on ratios
+        # identity: r_a == r_b - n
+        @update r_a⁻ < r_b⁻ - n
+        @update r_a⁺ > r_b⁺ - n
+        # identity: r_b == r_a + n
+        @update r_b⁻ < r_a⁻ + n
+        @update r_b⁺ > r_a⁺ + n
+        # identity: r_a == n/(r_ba - 1)
         if !iszero(a)
-            @update r_b⁻ < r_a⁻ * r_ba⁻ begin
-                if !signbit(b)
-                    sr_b⁻ = r_b⁻
-                else
-                    sr_b⁺ = -r_b⁻
-                end
-            end
-            @update r_b⁺ > r_a⁺ * r_ba⁺ begin
-                if !signbit(b)
-                    sr_b⁺ = r_b⁺
-                else
-                    sr_b⁻ = -r_b⁺
-                end
-            end
+            @update r_a⁻ < n/(r_ba⁺ - 1)
+            @update r_a⁺ > n/(r_ba⁻ - 1)
         end
+        # identity: r_b == n/(1 - r_ab)
+        if !iszero(b)
+            @update r_b⁻ < n/(1 - r_ab⁻)
+            @update r_b⁺ > n/(1 - r_ab⁺)
+        end
+        # identity: r_ab = 1 - n/r_b
+        @update r_ab⁻ < 1 - n/r_b⁻
+        @update r_ab⁺ > 1 - n/r_b⁺
+        # identity: r_ba = 1 + n/r_a
+        @update r_ba⁻ < 1 + n/r_a⁺
+        @update r_ba⁺ > 1 + n/r_a⁻
+        # identity: r_ab = 1/r_ba
+        @update r_ab⁻ < inv(r_ba⁺)
+        @update r_ab⁺ > inv(r_ba⁻)
+        # identity: r_ba = 1/r_ab
+        @update r_ba⁻ < inv(r_ab⁺)
+        @update r_ba⁺ > inv(r_ab⁻)
         # stop if unchanged
         !changed && break
-        # update ratios too
-        @update r_ab⁻ < r_a⁻/r_b⁺
-        @update r_ab⁺ > r_a⁺/r_b⁻
-        @update r_ba⁻ < r_b⁻/r_a⁺
-        @update r_ba⁺ > r_b⁺/r_a⁻
     end
     # find fraction interval based on [a]
-    f_a⁻, f_a⁺ = sr_a⁻, sr_a⁺
+    f_a⁻, f_a⁺ = r_a⁻, r_a⁺
     f_a⁻ *= exp2(-p); f_a⁺ *= exp2(-p)
     q_a = round(prevfloat(f_a⁻), RoundDown)
     f_a⁻ -= q_a; f_a⁺ -= q_a
     # find fraction interval based on [b]
-    f_b⁻, f_b⁺ = sr_b⁻, sr_b⁺
+    f_b⁻, f_b⁺ = r_b⁻, r_b⁺
     f_b⁻ *= exp2(-p); f_b⁺ *= exp2(-p)
     q_b = round(prevfloat(f_b⁻), RoundDown)
     f_b⁻ -= q_b; f_b⁺ -= q_b
@@ -509,7 +489,8 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     f⁺ = max(f_a⁺, f_b⁺)
     f⁻ ≤ f⁺ || error("end-point can't be hit (ratios)")
     # find simplest rational in interval
-    d = T(simplest_rational_core(f⁻, f⁺)[2])
+    f_n, f_d = simplest_rational_core(f⁻, f⁺)
+    d = T(f_d)
     # find simplest end-point ratios
     c = T(simplest_float(d*r_a⁻, d*r_a⁺))
     e = T(simplest_float(d*r_b⁻, d*r_b⁺))
@@ -518,20 +499,20 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     @assert z ≥ -p
     t = exp2(-z)
     c *= t; d *= t; e *= t
-    # check that c:e matches a:b
-    @assert a⁻*e ≤ b⁺*c
-    @assert a⁺*e ≥ b⁻*c
-    # check that c:d matches a:s
-    @assert a⁻*d ≤ s⁺*c
-    @assert a⁺*d ≥ s⁻*c
-    # check that e:d matches b:s
-    @assert b⁻*d ≤ s⁺*e
-    @assert b⁺*d ≥ s⁻*e
-    # restore end-point signs
-    signbit(a) && (c = -c)
-    signbit(b) && (e = -e)
-    # check length
+    # check consistency
     @assert d*n == e - c
+    # check ratios
+    @sign_swap a b
+    # check that c/d ∈ [a]/[s]
+    @assert a⁻*abs(d) ≤ s⁺*abs(c)
+    @assert a⁺*abs(d) ≥ s⁻*abs(c)
+    # check that e/d ∈ [b]/[s]
+    @assert b⁻*abs(d) ≤ s⁺*abs(e)
+    @assert b⁺*abs(d) ≥ s⁻*abs(e)
+    # check that c/e ∈ [a]/[b]
+    @assert a⁻*abs(e) ≤ b⁺*abs(c)
+    @assert a⁺*abs(e) ≥ b⁻*abs(c)
+    @sign_swap a b
     # return values
     return n, c, d, e
 end
