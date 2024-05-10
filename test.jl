@@ -91,7 +91,7 @@ end
 @testset "tests" begin
     T = Float64
     for (A, S, B, D, x) in examples
-        @show (A, S, B, D, x)
+        # @show (A, S, B, D, x)
         (a, s, b) = map(T, (A/D + x, S/D, B/D + x))
         r = lift_range(a, s, b)
         R = A:S:B
