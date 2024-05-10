@@ -444,36 +444,36 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     for _ = 1:64
         changed = false
         if !iszero(a)
-            # identity: r_a == n/(r_ba - 1)
+            # r_a == n/(r_ba - 1)
             @update r_a⁻ < n/(r_ba⁺ - 1)
             @update r_a⁺ > n/(r_ba⁻ - 1)
         end
         if !iszero(b)
-            # identity: r_b == n/(1 - r_ab)
+            # r_b == n/(1 - r_ab)
             @update r_b⁻ < n/(1 - r_ab⁻)
             @update r_b⁺ > n/(1 - r_ab⁺)
         end
         for _ = 1:2
-            # identity: r_a == r_b - n
+            # r_a == r_b - n
             @update r_a⁻ < r_b⁻ - n
             @update r_a⁺ > r_b⁺ - n
-            # identity: r_b == r_a + n
+            # r_b == r_a + n
             @update r_b⁻ < r_a⁻ + n
             @update r_b⁺ > r_a⁺ + n
         end
         if !iszero(a)
-            # identity: r_ba = 1 + n/r_a
+            # r_ba = 1 + n/r_a
             @update r_ba⁻ < 1 + n/r_a⁺
             @update r_ba⁺ > 1 + n/r_a⁻
-            # identity: r_ab = 1/r_ba
+            # r_ab = 1/r_ba
             @update r_ab⁻ < one(T)/r_ba⁺
             @update r_ab⁺ > one(T)/r_ba⁻
         end
         if !iszero(b)
-            # identity: r_ab = 1 - n/r_b
+            # r_ab = 1 - n/r_b
             @update r_ab⁻ < 1 - n/r_b⁻
             @update r_ab⁺ > 1 - n/r_b⁺
-            # identity: r_ba = 1/r_ab
+            # r_ba = 1/r_ab
             @update r_ba⁻ < one(T)/r_ab⁺
             @update r_ba⁺ > one(T)/r_ab⁻
         end
