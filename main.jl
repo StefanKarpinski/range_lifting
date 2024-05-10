@@ -445,21 +445,21 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
         changed = false
         if !iszero(a)
             # identity: r_a == n/(r_ba - 1)
-            @update r_a⁻ < n/(r_ba⁺ - 1) # @show r_a⁻
-            @update r_a⁺ > n/(r_ba⁻ - 1) # @show r_a⁺
+            @update r_a⁻ < n/(r_ba⁺ - 1)
+            @update r_a⁺ > n/(r_ba⁻ - 1)
         end
         if !iszero(b)
             # identity: r_b == n/(1 - r_ab)
-            @update r_b⁻ < n/(1 - r_ab⁻) # @show r_b⁻
-            @update r_b⁺ > n/(1 - r_ab⁺) # @show r_b⁺
+            @update r_b⁻ < n/(1 - r_ab⁻)
+            @update r_b⁺ > n/(1 - r_ab⁺)
         end
         for _ = 1:2
             # identity: r_a == r_b - n
-            @update r_a⁻ < r_b⁻ - n # @show r_a⁻
-            @update r_a⁺ > r_b⁺ - n # @show r_a⁺
+            @update r_a⁻ < r_b⁻ - n
+            @update r_a⁺ > r_b⁺ - n
             # identity: r_b == r_a + n
-            @update r_b⁻ < r_a⁻ + n # @show r_b⁻
-            @update r_b⁺ > r_a⁺ + n # @show r_b⁺
+            @update r_b⁻ < r_a⁻ + n
+            @update r_b⁺ > r_a⁺ + n
         end
         if !iszero(a)
             # identity: r_ba = 1 + n/r_a
