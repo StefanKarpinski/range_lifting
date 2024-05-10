@@ -435,11 +435,11 @@ function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
     r_ab⁺ = ratio_break⁺(a⁺, b⁻)
     r_ba⁻ = ratio_break⁻(b⁻, a⁺)
     r_ba⁺ = ratio_break⁺(b⁺, a⁻)
+    @sign_swap a b
     if signbit(a) ⊻ signbit(b)
         r_ab⁻, r_ab⁺ = -r_ab⁺, -r_ab⁻
         r_ba⁻, r_ba⁺ = -r_ba⁺, -r_ba⁻
     end
-    @sign_swap a b
     # contract intervals based on identities
     for _ = 1:64
         changed = false
