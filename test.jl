@@ -23,6 +23,11 @@ for x in shifts, a in [3, 1, -1, -3]
     @example a, 2, 19, 10, x
 end
 
+# TODO (broken, ratio consistency):
+# for a = -10:10, s = 1:10, n = 0:10, d = 1:19, x in shifts
+#     @example a, s, a+n, d, x
+# end
+
 function base_examples(d, x)
     @example  -1,  1,  0, d, x
     @example  -2,  1,  0, d, x
@@ -56,6 +61,7 @@ for d = 1:100, x = shifts
 end
 
 @example 0, 15, 42000, 100, 0
+@example 49, 1, 1323, 49, 0
 
 @example  "-3e50", "1e50", "4e50", 1, 0
 @example  "-3e50", "1e50", "4e50", "1e25", 0
@@ -89,10 +95,10 @@ end
 @example   0, 5, 15, "1e324", 0
 @example -15, 5,  0, "1e324", 0
 
-# TODO (broken):
+# TODO (broken, subnormal):
 # @example 3, 2, 19, "1e310", 0.0
 
-# TODO (broken):
+# TODO (broken, near infinity):
 # lift_range(-floatmax(T), floatmax(T)/10, floatmax(T))
 
 @testset "tests" begin
