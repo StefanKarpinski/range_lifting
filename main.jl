@@ -401,6 +401,56 @@ macro update(cmp::Expr, body::Expr=quote end)
     end
 end
 
+lcm(args::T...) where {T<:AbstractFloat} =
+    T(Base.lcm(map(Int64, args)...))
+
+function range_grid(a::T, b::T, s::T) where {T<:AbstractFloat}
+    # handle negative step
+    if signbit(s)
+        a = -a
+        b = -b
+        s = -s
+    end
+    # double precision intervals for a, b, s
+    a⁻, a⁺ = ival(a)
+    b⁻, b⁺ = ival(b)
+    s⁻, s⁺ = ival(s)
+    # end-point/step ratio intervals
+    r_a⁻ = ratio_break⁻(a⁻, signbit(a) ? s⁻ : s⁺)
+    r_a⁺ = ratio_break⁺(a⁺, signbit(a) ? s⁺ : s⁻)
+    r_b⁻ = ratio_break⁻(b⁻, signbit(b) ? s⁻ : s⁺)
+    r_b⁺ = ratio_break⁺(b⁺, signbit(b) ? s⁺ : s⁻)
+    # pick simplest range length
+    N = T(simplest_float(r_b⁻ - r_a⁺, r_b⁺ - r_a⁻))
+    # check if end-point can be hit
+    p = tz(N)
+    p ≥ 0 || error("end-point can't be hit (length)")
+    # scaled down intervals
+    a⁻, a⁺ = ival(ldexp(a, -p))
+    b⁻, b⁺ = ival(ldexp(b, -p))
+    # find the range ratios
+    d_a = T(simplest_rational_core(a⁻, a⁺)[2])
+    d_b = T(simplest_rational_core(b⁻, b⁺)[2])
+    d_s = T(simplest_rational_core(s⁻, s⁺)[2])
+    local A, B, S, D
+    for d = max(d_a, d_b, d_s):lcm(d_a, d_b, d_s)
+        A = T(simplest_float(d*a⁻, d*a⁺)); tz(A) ≥ 0 || continue
+        B = T(simplest_float(d*b⁻, d*b⁺)); tz(B) ≥ 0 || continue
+        S = T(simplest_float(d*s⁻, d*s⁺)); tz(S) ≥ 0 || continue
+        # found smallest denominator
+        A = ldexp(A, p)
+        B = ldexp(B, p)
+        D = d
+        break
+    end
+    # check assertions
+    @assert A/D == a
+    @assert B/D == b
+    @assert S/D == s
+    @assert (B - A)/S == N
+    return A, B, S, D
+end
+
 # Find simple integers for length n and integers (c, d, e) such that:
 #
 #   n = (e - c)/d
