@@ -212,6 +212,27 @@ function simplest_rational(
     return n, d
 end
 
+function simplest_denominator(
+    lo :: TwicePrecision{T},
+    hi :: TwicePrecision{T},
+) where {T<:AbstractFloat}
+    𝟘 = zero(lo)
+    𝟙 = one(lo)
+
+    # reduce to positive case
+    if hi < 𝟘
+        lo, hi = -hi, -lo
+    end
+    lo ≤ 𝟘 && return 𝟙
+    # if there are integers, return the simplest one
+    round(lo, RoundUp) ≤ round(hi, RoundDown) && return 𝟙
+
+    # find strictly minimal solution
+    n, d = simplest_rational_core(lo, hi)
+
+    return d
+end
+
 function ival(x::T) where {T<:AbstractFloat}
     lo = (TwicePrecision(x) + TwicePrecision(prevfloat(x)))/2
     hi = (TwicePrecision(x) + TwicePrecision(nextfloat(x)))/2
@@ -354,19 +375,20 @@ function ratio_ival(x::T, y::T) where {T<:AbstractFloat}
 end
 
 struct FRange{T<:AbstractFloat} <: AbstractRange{T}
-    c::T
-    d::T
+    A::T
+    S::T
     n::T
     g::TwicePrecision{T}
 end
 
 Base.length(r::FRange) = max(0, Int(r.n) + 1)
 Base.first(r::FRange) = r[1]
-Base.step(r::FRange) = tmul(r.d, r.g)
-Base.last(r::FRange) = eltype(r)((r.n*r.d + r.c)*r.g)
+Base.step(r::FRange) = tmul(r.S, r.g)
+Base.last(r::FRange) = getindex0(r, r.n)
+Base.getindex(r::FRange, i::Integer) = getindex0(r, i-1)
 
-Base.getindex(r::FRange{T}, i::Integer) where {T<:AbstractFloat} =
-    T((TwicePrecision{T}(i-1)*r.d + r.c)*r.g)
+getindex0(r::FRange{T}, i::Real) where {T<:AbstractFloat} =
+    T((r.A + convert(TwicePrecision{T}, i)*r.S)*r.g)
 
 macro sign_swap(syms::Symbol...)
     blk = quote end
@@ -403,8 +425,10 @@ end
 
 lcm(args::T...) where {T<:AbstractFloat} =
     T(Base.lcm(map(Int64, args)...))
+gcd(args::T...) where {T<:AbstractFloat} =
+    T(Base.gcd(map(Int64, args)...))
 
-function range_grid(a::T, b::T, s::T) where {T<:AbstractFloat}
+function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     # handle negative step
     if signbit(s)
         a = -a
@@ -429,175 +453,41 @@ function range_grid(a::T, b::T, s::T) where {T<:AbstractFloat}
     a⁻, a⁺ = ival(ldexp(a, -p))
     b⁻, b⁺ = ival(ldexp(b, -p))
     # find the range ratios
-    d_a = T(simplest_rational_core(a⁻, a⁺)[2])
-    d_b = T(simplest_rational_core(b⁻, b⁺)[2])
-    d_s = T(simplest_rational_core(s⁻, s⁺)[2])
+    d_a = T(simplest_denominator(a⁻, a⁺))
+    d_b = T(simplest_denominator(b⁻, b⁺))
+    d_s = T(simplest_denominator(s⁻, s⁺))
     local A, B, S, D
     for d = max(d_a, d_b, d_s):lcm(d_a, d_b, d_s)
         A = T(simplest_float(d*a⁻, d*a⁺)); tz(A) ≥ 0 || continue
         B = T(simplest_float(d*b⁻, d*b⁺)); tz(B) ≥ 0 || continue
         S = T(simplest_float(d*s⁻, d*s⁺)); tz(S) ≥ 0 || continue
         # found smallest denominator
-        A = ldexp(A, p)
-        B = ldexp(B, p)
         D = d
         break
+    end
+    # remove common powers of two
+    q = min(tz(A)+p, tz(B)+p, tz(S), tz(D))
+    if p ≠ q
+        A = ldexp(A, p-q)
+        B = ldexp(B, p-q)
+    end
+    if q ≠ 0
+        S = ldexp(S, -q)
+        D = ldexp(D, -q)
     end
     # check assertions
     @assert A/D == a
     @assert B/D == b
     @assert S/D == s
     @assert (B - A)/S == N
-    return A, B, S, D
-end
-
-# Find simple integers for length n and integers (c, d, e) such that:
-#
-#   n = (e - c)/d
-#   c/d ∈ [a]/[s]
-#   e/d ∈ [b]/[s]
-#   c/e ∈ [a]/[b]
-#
-function range_ratios(a::T, s::T, b::T) where {T<:AbstractFloat}
-    # handle negative step
-    if signbit(s)
-        a = -a
-        s = -s
-        b = -b
-    end
-    # double precision intervals for a, s, b
-    a⁻, a⁺ = ival(a)
-    s⁻, s⁺ = ival(s)
-    b⁻, b⁺ = ival(b)
-    # end-point/step ratio intervals
-    r_a⁻ = ratio_break⁻(a⁻, signbit(a) ? s⁻ : s⁺)
-    r_a⁺ = ratio_break⁺(a⁺, signbit(a) ? s⁺ : s⁻)
-    r_b⁻ = ratio_break⁻(b⁻, signbit(b) ? s⁻ : s⁺)
-    r_b⁺ = ratio_break⁺(b⁺, signbit(b) ? s⁺ : s⁻)
-    # pick simplest range length
-    n = T(simplest_float(r_b⁻ - r_a⁺, r_b⁺ - r_a⁻))
-    # check if end-point can be hit
-    p = tz(n)
-    p ≥ 0 || error("end-point can't be hit (length)")
-    # ratio intervals between end-points
-    @sign_swap a b
-    r_ab⁻ = ratio_break⁻(a⁻, b⁺)
-    r_ab⁺ = ratio_break⁺(a⁺, b⁻)
-    r_ba⁻ = ratio_break⁻(b⁻, a⁺)
-    r_ba⁺ = ratio_break⁺(b⁺, a⁻)
-    @sign_swap a b
-    if signbit(a) ⊻ signbit(b)
-        r_ab⁻, r_ab⁺ = -r_ab⁺, -r_ab⁻
-        r_ba⁻, r_ba⁺ = -r_ba⁺, -r_ba⁻
-    end
-    # contract intervals based on identities
-    for _ = 1:64
-        changed = false
-        if !iszero(a)
-            # r_a == n/(r_ba - 1)
-            @update r_a⁻ < n/(r_ba⁺ - 1)
-            @update r_a⁺ > n/(r_ba⁻ - 1)
-        end
-        if !iszero(b)
-            # r_b == n/(1 - r_ab)
-            @update r_b⁻ < n/(1 - r_ab⁻)
-            @update r_b⁺ > n/(1 - r_ab⁺)
-        end
-        for _ = 1:2
-            # r_a == r_b - n
-            @update r_a⁻ < r_b⁻ - n
-            @update r_a⁺ > r_b⁺ - n
-            # r_b == r_a + n
-            @update r_b⁻ < r_a⁻ + n
-            @update r_b⁺ > r_a⁺ + n
-        end
-        if !iszero(a)
-            # r_ba = 1 + n/r_a
-            @update r_ba⁻ < 1 + n/r_a⁺
-            @update r_ba⁺ > 1 + n/r_a⁻
-            # r_ab = 1/r_ba
-            @update r_ab⁻ < one(T)/r_ba⁺
-            @update r_ab⁺ > one(T)/r_ba⁻
-        end
-        if !iszero(b)
-            # r_ab = 1 - n/r_b
-            @update r_ab⁻ < 1 - n/r_b⁻
-            @update r_ab⁺ > 1 - n/r_b⁺
-            # r_ba = 1/r_ab
-            @update r_ba⁻ < one(T)/r_ab⁺
-            @update r_ba⁺ > one(T)/r_ab⁻
-        end
-        # stop if unchanged
-        !changed && break
-    end
-    # find fraction interval based on [a]
-    f_a⁻, f_a⁺ = r_a⁻, r_a⁺
-    f_a⁻ *= exp2(-p); f_a⁺ *= exp2(-p)
-    q_a = round(prevfloat(f_a⁻), RoundDown)
-    f_a⁻ -= q_a; f_a⁺ -= q_a
-    # find fraction interval based on [b]
-    f_b⁻, f_b⁺ = r_b⁻, r_b⁺
-    f_b⁻ *= exp2(-p); f_b⁺ *= exp2(-p)
-    q_b = round(prevfloat(f_b⁻), RoundDown)
-    f_b⁻ -= q_b; f_b⁺ -= q_b
-    # combine them
-    f⁻ = max(f_a⁻, f_b⁻)
-    f⁺ = max(f_a⁺, f_b⁺)
-    f⁻ ≤ f⁺ || error("end-point can't be hit (ratios)")
-    # find simplest rational in interval
-    f_n, f_d = simplest_rational_core(f⁻, f⁺)
-    d = T(f_d)
-    # find simplest end-point ratios
-    c = T(simplest_float(d*r_a⁻, d*r_a⁺))
-    e = T(simplest_float(d*r_b⁻, d*r_b⁺))
-    # eliminate common powers of two
-    z = min(tz(c), tz(d), tz(e))
-    @assert z ≥ -p
-    t = exp2(-z)
-    c *= t; d *= t; e *= t
-    # check consistency
-    @assert d*n == e - c
-    # check ratios
-    @sign_swap a b
-    # check that c/d ∈ [a]/[s]
-    @assert a⁻*abs(d) ≤ s⁺*abs(c)
-    @assert a⁺*abs(d) ≥ s⁻*abs(c)
-    # check that e/d ∈ [b]/[s]
-    @assert b⁻*abs(d) ≤ s⁺*abs(e)
-    @assert b⁺*abs(d) ≥ s⁻*abs(e)
-    # check that c/e ∈ [a]/[b]
-    @assert a⁻*abs(e) ≤ b⁺*abs(c)
-    @assert a⁺*abs(e) ≥ b⁻*abs(c)
-    @sign_swap a b
-    # return values
-    return n, c, d, e
-end
-
-function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
-    # normalize the range
-    if any(issubnormal, (a, s, b))
-        ε = eps(zero(T))
-        r = lift_range(a/ε, s/ε, b/ε)
-        return FRange(r.c, r.d, r.n, r.g*ε)
-    end
-    # find the relative grid ratios
-    n, c, d, e = range_ratios(a, s, b)
-    # still need rational value g:
-    #  - g = s/d = a/c = b/e
-    # get double precision bounds on g:
-    lo_a, hi_a = ratio_ival(a, c)
-    lo_s, hi_s = ratio_ival(s, d)
-    lo_b, hi_b = ratio_ival(b, e)
-    lo = max(lo_a, lo_s, lo_b)
-    hi = min(hi_a, hi_s, hi_b)
-    lo ≤ hi || error("end-point can't be hit (grid unit)")
-    num, den = simplest_rational(lo, hi)
-    g = num/den
-    @assert lo ≤ g ≤ hi
+    # compute the grid unit
+    G = gcd(A, B, S)
+    g = TwicePrecision(G)/TwicePrecision(D)
+    A /= G; B /= G; S /= G
     # check that inputs are hit
-    @assert tmul(c, g) == a
-    @assert tmul(d, g) == s
-    @assert tmul(e, g) == b
+    @assert tmul(A, g) == a
+    @assert tmul(B, g) == b
+    @assert tmul(S, g) == s
     # return range object
-    FRange(c, d, n, g)
+    FRange(A, S, N, g)
 end
