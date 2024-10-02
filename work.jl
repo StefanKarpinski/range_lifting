@@ -132,56 +132,80 @@ function frac(A::Vector{T}) where {T<:Integer}
     return n//d
 end
 
-for _ = 1:500
-    v1 = rand_ival(offset=2)
-    v2 = rand_ival(offset=2)
-    r1 = simplest_frac(v1); d1 = r1.den
-    r2 = simplest_frac(v2); d2 = r2.den
-    d = smallest_denominator(v1, v2)
-    max(r1.den, r2.den) < d || continue
-    n1 = ceil(d*v1[1]); @assert v1[1] ≤ n1//d ≤ v1[2]
-    n2 = ceil(d*v2[1]); @assert v2[1] ≤ n2//d ≤ v2[2]
-    vr = v1[1]/v2[2], v1[2]/v2[1]
-    r⁻ = simplest_frac(vr)
-    r = n1//n2
-    r⁺ = r1/r2
-    @show v1, v2
-    @show d1, d2, d
-    @show r⁻, r, r⁺, r ≼ r⁺, r⁺ ≼ r
-end
-
-# (26//105, 86//289), (61//404, 63//292): 4, 5, 11, 11
-# v1.lo: 26//105 1//4 1//3 1//2 1//1
-# v1.hi: 86//289 61//205 36//121 11//37 8//27 5//17 2//7 1//4
-# v2.lo: 61//404 53//351 45//298 37//245 29//192 21//139 13//86 5//33 2//13 1//6 1//5 1//4 1//3 1//2 1//1
-# v2.hi: 63//292 11//51 3//14 1//5
-
-function tree(n::Integer)
-    root = ((1,0,0), (0,1,0), (0,0,1))
-    list = Vector{typeof(root)}(undef, n)
-    list[1] = root
-    for i = 2:n
-        p = list[i >> 1]
-        list[i] = iseven(i) ?
-            (p[1], p[1].+p[2], p[2]) :
-            (p[2], p[2].+p[3], p[3])
+function cfrac_tree(r::Rational, depth::Integer=5)
+    V = zeros(typeof(r), 2^depth-1)
+    V[1] = r
+    for i = 2:length(V)
+        p = V[i >> 1]
+        V[i] = iseven(i) ? child_l(p) : child_r(p)
     end
-    return list
+    for (i, x) in enumerate(V)
+        print(x)
+        if ispow2(i+1)
+            println()
+        else
+            print(' ')
+        end
+    end
 end
 
-L = [1 0 0; 1 1 0; 0 1 0]
-R = [0 1 0; 0 1 1; 0 0 1]
+function simplest_frac′(v1::NTuple{2,Real})
+    lo, hi = v1
+    hi⁻¹ = inv(hi)
+    d = 1
+    while true
+        n = ceil(Int, d*lo)
+        n ≤ d*hi && return n//d
+        d = ceil(Int, n*hi⁻¹)
+    end
+end
 
-function coprimes(n::Integer, a::Integer, b::Integer)
-    root = (a, b)
-    list = Vector{typeof(root)}(undef, n)
-    list[1] = root
-    for i = 2:n
-        a, b = list[(i+1)÷3]
-        list[i] =
-            i % 3 == 2 ? (2a - b, a) :
-            i % 3 == 0 ? (2a + b, a) :
-            i % 3 == 1 ? (a + 2b, b) : error()
-    end 
-    return list
+for _ = 1:10000
+    v = rand_ival()
+    @assert simplest_frac(v) == simplest_frac′(v)
+end
+
+function smallest_denominator′(v1::NTuple{2,Real}, v2::NTuple{2,Real})
+    d = 1
+    while true
+        n1 = ceil(Int, d*v1[1])
+        n2 = ceil(Int, d*v2[1])
+        n1 ≤ d*v1[2] &&
+        n2 ≤ d*v2[2] && return d
+        d = max(
+            ceil(Int, n1/v1[2]),
+            ceil(Int, n2/v2[2]),
+        )
+        d*v1[1] ≤ n1 &&
+        d*v2[1] ≤ n2 && return d
+    end
+end
+
+function smallest_denominator′(
+    v1::NTuple{2,Real},
+    v2::NTuple{2,Real},
+    v3::NTuple{2,Real},
+)
+    d = 1
+    while true
+        n1 = ceil(Int, d*v1[1])
+        n2 = ceil(Int, d*v2[1])
+        n3 = ceil(Int, d*v3[1])
+        n1 ≤ d*v1[2] &&
+        n2 ≤ d*v2[2] &&
+        n3 ≤ d*v3[2] && return d
+        d = max(
+            ceil(Int, n1/v1[2]),
+            ceil(Int, n2/v2[2]),
+            ceil(Int, n3/v3[2]),
+        )
+    end
+end
+
+for _ = 1:100000
+    v1 = rand_ival(offset=rand(1:100))
+    v2 = rand_ival(offset=rand(1:100))
+    v3 = rand_ival(offset=rand(1:100))
+    @assert smallest_denominator(v1, v2, v3) ==
+            smallest_denominator′(v1, v2, v3)
 end

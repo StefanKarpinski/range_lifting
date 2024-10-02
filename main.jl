@@ -212,7 +212,7 @@ function simplest_rational(
     return n, d
 end
 
-function simplest_denominator(
+function smallest_denominator(
     lo :: TwicePrecision{T},
     hi :: TwicePrecision{T},
 ) where {T<:AbstractFloat}
@@ -450,22 +450,35 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     p = tz(N)
     p ≥ 0 || error("end-point can't be hit (length)")
     # scaled down intervals
-    a⁻, a⁺ = ival(ldexp(a, -p))
-    b⁻, b⁺ = ival(ldexp(b, -p))
-    # find the range ratios
-    d_a = T(simplest_denominator(a⁻, a⁺))
-    d_b = T(simplest_denominator(b⁻, b⁺))
-    d_s = T(simplest_denominator(s⁻, s⁺))
-    local A, B, S, D
-    for d = max(d_a, d_b, d_s):lcm(d_a, d_b, d_s)
-        A = T(simplest_float(d*a⁻, d*a⁺)); tz(A) ≥ 0 || continue
-        B = T(simplest_float(d*b⁻, d*b⁺)); tz(B) ≥ 0 || continue
-        S = T(simplest_float(d*s⁻, d*s⁺)); tz(S) ≥ 0 || continue
-        # found smallest denominator
-        D = d
-        break
+    if p > 0
+        a⁻, a⁺ = ival(ldexp(a, -p))
+        b⁻, b⁺ = ival(ldexp(b, -p))
     end
-    # remove common powers of two
+    # find smallest common denominator
+    D = max(
+        smallest_denominator(a⁻, a⁺),
+        smallest_denominator(b⁻, b⁺),
+        smallest_denominator(s⁻, s⁺),
+    )
+    while true
+        A = round(D*a⁻, RoundUp)
+        B = round(D*b⁻, RoundUp)
+        S = round(D*s⁻, RoundUp)
+        A ≤ D*a⁺ &&
+        B ≤ D*b⁺ &&
+        S ≤ D*s⁺ && break
+        D = max(
+            round(A/a⁺, RoundUp),
+            round(B/b⁺, RoundUp),
+            round(S/s⁺, RoundUp),
+        )
+    end
+    D = T(D)
+    # find simplest numerator for each interval
+    A = T(simplest_float(D*a⁻, D*a⁺)); @assert tz(A) ≥ 0
+    B = T(simplest_float(D*b⁻, D*b⁺)); @assert tz(B) ≥ 0
+    S = T(simplest_float(D*s⁻, D*s⁺)); @assert tz(S) ≥ 0
+    # readjust factors of two
     q = min(tz(A)+p, tz(B)+p, tz(S), tz(D))
     if p ≠ q
         A = ldexp(A, p-q)
