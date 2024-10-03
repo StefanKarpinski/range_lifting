@@ -133,21 +133,30 @@ function frac(A::Vector{T}) where {T<:Integer}
 end
 
 function cfrac_tree(r::Rational, depth::Integer=5)
-    V = zeros(typeof(r), 2^depth-1)
-    V[1] = r
-    for i = 2:length(V)
-        p = V[i >> 1]
-        V[i] = iseven(i) ? child_l(p) : child_r(p)
+    v = zeros(typeof(r), 2^depth-1)
+    v[1] = r
+    for i = 2:length(v)
+        p = v[i >> 1]
+        v[i] = iseven(i) ? child_l(p) : child_r(p)
     end
-    for (i, x) in enumerate(V)
-        print(x)
-        if ispow2(i+1)
-            println()
-        else
-            print(' ')
+    return v
+end
+
+function print_btree(io::IO, v::Vector)
+    n = length(v)
+    d = ceil(Int, log2(n+1))
+    w = maximum(textwidth∘string, v)
+    for r = 2^(d-1):2^d-1
+        for i = reverse(1:n)
+            j = i << (leading_zeros(i)-8*sizeof(Int)+d)
+            j == r || continue
+            x = v[i]
+            print(io, ' ', rpad(string(x), w))
         end
+        println(io)
     end
 end
+print_btree(v::Vector) = print_btree(stdout, v)
 
 function simplest_frac′(v1::NTuple{2,Real})
     lo, hi = v1
