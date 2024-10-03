@@ -472,6 +472,7 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
             round(B/b⁺, RoundUp),
             round(S/s⁺, RoundUp),
         )
+        @show D
     end
     D = T(D)
     # find simplest numerator for each interval

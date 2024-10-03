@@ -68,6 +68,7 @@ function up(A::Vector{T}) where {T<:Integer}
     end
     return A
 end
+up(x::Real) = frac(up(cfrac(x)))
 
 function ancestor(pred::Function, A::Vector{T}) where {T<:Integer}
     x = frac(A)
@@ -158,63 +159,47 @@ function print_btree(io::IO, v::Vector)
 end
 print_btree(v::Vector) = print_btree(stdout, v)
 
-function simplest_frac′(v1::NTuple{2,Real})
-    lo, hi = v1
-    hi⁻¹ = inv(hi)
-    d = 1
+gen_ivals() = while true
+    v1 = rand_ival()
+    v2 = rand_ival()
+
+    # simplest fractions in each
+    f1 = simplest_frac(v1); d1 = f1.den
+    f2 = simplest_frac(v2); d2 = f2.den
+
+    # smallest common denominator
+    d = smallest_denominator(v1, v2)
+
+    # skip easy cases
+    max(d1, d2) < d || continue
+
+    # find n1, n2 corresponding to common d
+    n1 = ceil(Int, d*v1[1])
+    n2 = ceil(Int, d*v2[1])
+
+    # skip if numerator ratio is easy to find
+    r = n1//n2 # optimal ratio
+    isancestor(r, f1/f2) && continue
+
+    # find upper bound on solutions
+    r⁺ = f1/f2 # known solution
+    # PROBLEM: known solution doesn't always appear as solution
+    # according to the criterion below with d⁻ and d⁺
     while true
-        n = ceil(Int, d*lo)
-        n ≤ d*hi && return n//d
-        d = ceil(Int, n*hi⁻¹)
+        # move up Stern-Brocot tree while feasible
+        r′ = up(r⁺)
+        d⁻ = max(ceil(Int, r′.num/v1[2]), ceil(Int, r′.den/v2[2]))
+        d⁺ = min(floor(Int, r′.num/v1[1]), floor(Int, r′.den/v2[1]))
+        d⁻ ≤ d⁺ || break
+        r⁺ = r′
     end
-end
 
-for _ = 1:10000
-    v = rand_ival()
-    @assert simplest_frac(v) == simplest_frac′(v)
-end
+    # continue if siblings with optimal ratio
+    up(r) == up(r⁺) && continue
 
-function smallest_denominator′(v1::NTuple{2,Real}, v2::NTuple{2,Real})
-    d = 1
-    while true
-        n1 = ceil(Int, d*v1[1])
-        n2 = ceil(Int, d*v2[1])
-        n1 ≤ d*v1[2] &&
-        n2 ≤ d*v2[2] && return d
-        d = max(
-            ceil(Int, n1/v1[2]),
-            ceil(Int, n2/v2[2]),
-        )
-        d*v1[1] ≤ n1 &&
-        d*v2[1] ≤ n2 && return d
-    end
-end
+    return v1, v2
 
-function smallest_denominator′(
-    v1::NTuple{2,Real},
-    v2::NTuple{2,Real},
-    v3::NTuple{2,Real},
-)
-    d = 1
-    while true
-        n1 = ceil(Int, d*v1[1])
-        n2 = ceil(Int, d*v2[1])
-        n3 = ceil(Int, d*v3[1])
-        n1 ≤ d*v1[2] &&
-        n2 ≤ d*v2[2] &&
-        n3 ≤ d*v3[2] && return d
-        d = max(
-            ceil(Int, n1/v1[2]),
-            ceil(Int, n2/v2[2]),
-            ceil(Int, n3/v3[2]),
-        )
-    end
-end
-
-for _ = 1:100000
-    v1 = rand_ival(offset=rand(1:100))
-    v2 = rand_ival(offset=rand(1:100))
-    v3 = rand_ival(offset=rand(1:100))
-    @assert smallest_denominator(v1, v2, v3) ==
-            smallest_denominator′(v1, v2, v3)
+    vr = v1[1]/v2[2], v1[2]/v2[1]
+    r⁻ = simplest_frac(vr)
+    tr = cfrac_tree(r⁻)
 end
