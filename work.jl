@@ -13,7 +13,33 @@ function rand_ival(;
     return offset + lo, offset + hi
 end
 
+function simplest_frac((x, y)::NTuple{2,Rational})
+    @assert 0 < x ≤ y
+
+    s, t = x.num, x.den
+    u, v = y.num, y.den
+
+    a = d = 1
+    b = c = 0
+
+    while true
+        q = (s - 1) ÷ t
+        s, t, u, v = v, u-q*v, t, s-q*t
+        a, b, c, d = b+q*a, a, d+q*c, c
+        s ≤ t && break
+    end
+
+    return (a + b)//(c + d)
+end
+
+function smallest_denominator(v::NTuple{2,Rational})
+    simplest_frac(v).den
+end
+
 function smallest_denominator(vs::NTuple{2,Real}...)
+    for (lo, hi) in vs
+        @assert lo ≤ hi
+    end
     d = 0
     while true
     @label next
@@ -23,12 +49,6 @@ function smallest_denominator(vs::NTuple{2,Real}...)
         end
         return d
     end
-end
-
-function simplest_frac(v::NTuple{2,Real})
-    d = smallest_denominator(v)
-    n = ceil(d*v[1])
-    return n//d
 end
 
 function cfrac(x::Real)
@@ -107,7 +127,6 @@ function ancestors(pred::Function, A::Vector{T}) where {T<:Integer}
 end
 
 ancestors(A::Vector{<:Integer}) = ancestors(Returns(true), A)
-ancestors(x::Real) = map(frac, ancestors(cfrac(x)))
 
 isancestor(A::Vector{T}, B::Vector{T}) where {T<:Integer} =
     A ∈ ancestors(B)
@@ -123,6 +142,24 @@ end
 function ancestors⁺(A::Vector{<:Integer})
     a = frac(A)
     ancestors(B -> frac(B) ≥ a, A)
+end
+
+ancestors(p::Function, x::Real) = map(frac, ancestors(p∘frac, cfrac(x)))
+ancestors(x::Real) = map(frac, ancestors(cfrac(x)))
+ancestors⁻(x::Real) = map(frac, ancestors⁻(cfrac(x)))
+ancestors⁺(x::Real) = map(frac, ancestors⁺(cfrac(x)))
+
+function partition((x, y)::NTuple{2,Real})
+    @assert x ≤ y
+    X = ancestors(z -> x ≤ z ≤ y, x)
+    Y = ancestors(z -> x ≤ z ≤ y, y)
+    @assert issorted(X, rev=false)
+    @assert issorted(Y, rev=true)
+    @assert X[end] == Y[end]
+    P = X ∪ reverse(Y)
+    @assert issorted(P)
+    @assert all(cross_det(P[i], P[i+1]) == 1 for i=1:length(P)-1)
+    return P
 end
 
 function frac(A::Vector{T}) where {T<:Integer}
@@ -152,7 +189,7 @@ function print_btree(io::IO, v::Vector)
             j = i << (leading_zeros(i)-8*sizeof(Int)+d)
             j == r || continue
             x = v[i]
-            print(io, ' ', rpad(string(x), w))
+            print(io, ' ', lpad(string(x), w))
         end
         println(io)
     end
@@ -202,4 +239,105 @@ gen_ivals() = while true
     vr = v1[1]/v2[2], v1[2]/v2[1]
     r⁻ = simplest_frac(vr)
     tr = cfrac_tree(r⁻)
+end
+
+# NON-WORKING ALGORITHM
+function smallest_denominator′(x::Rational{Int}, y::Rational{Int})
+    a, b = x.num, x.den
+    c, d = y.num, y.den
+    g, m, n = gcdx(b, d)
+    M = b*d÷g
+    u = mod(invmod(-a,b)*n*(d÷g), M)
+    v = mod(invmod(c,d)*m*(b÷g), M)
+    if u > v
+        u -= M
+    else
+        v -= M
+    end
+    D, i, j = gcdx(u, v)
+    @assert i ≥ 0 && j ≥ 0
+    i %= b
+    j %= d
+    s = 1
+    while (s*i % b)*d + (s*j % d)*b > (s*D)*(b*c - a*d)
+        s += 1
+    end
+    D = s*D
+    i = s*i % b
+    j = s*j % d
+end
+
+mediant(x::Rational, y::Rational) = (x.num + y.num)//(x.den + y.den)
+
+function mediant_tree(iv::NTuple{2,NTuple{2,Integer}}, d::Integer=5)
+    v = [iv...]
+    for _ = 1:d
+        for i = reverse(1:length(v)-1)
+            insert!(v, i+1, v[i] .+ v[i+1])
+        end
+    end
+    return v
+end
+
+mediant_tree(iv::NTuple{2,Rational{<:Integer}}, d::Integer=5) =
+    map(t -> Rational(t...), mediant_tree(map(r -> (r.num, r.den), iv), d))
+
+cross_det(x::Rational, y::Rational) = x.den*y.num - x.num*y.den
+cross_det(x::NTuple{2,Real}, y::NTuple{2,Real}) = x[2]*y[1] - x[1]*y[2]
+
+#=
+v = (x, y) = (1054//361, 2721//926)
+v = (x, y) = rand_ival()
+
+f = simplest_frac((x, y))
+cross_det(x, y)
+cross_det(x, f)
+cross_det(f, y)
+cross_det(x, mediant(x, f))
+cross_det(mediant(x, f), f)
+
+cross_det(f, mediant(f, y))
+cross_det(mediant(f, y), y)
+
+for _ = 1:1000
+    x, y = rand_ival()
+    1 in [cross_det(x, z) for z in ancestors(x)] &&
+    1 in [cross_det(z, y) for z in ancestors(y)] && continue
+    @show x, y
+end
+=#
+
+function lcc(a::Int, b::Int, c::Int, d::Int)
+    if a < b
+        a, b = b, a
+    end
+    if c < d
+        c, d = d, c
+    end
+    if a < c
+        a, b, c, d = c, d, a, b
+    end
+    println((a, b, c, d))
+
+    g_bd, u_bd = gcdx(b, d)
+    g_cd, u_cd = gcdx(c, d)
+
+    n = b*d÷g_bd # solution when i = k = 0
+
+    for i = 0:fld(n-1,a)
+        k = mod(a*i*u_cd, g_bd)
+        if i == k == 0
+            k += g_bd
+        end
+        c*k < n || continue
+        p = a*i - c*k
+        j = mod(-p*u_bd,d)÷g_bd
+        l = (b*j + p)÷d
+        @assert a*i + b*j == c*k + d*l
+        @assert !any(a*i + b*j == c*k + d*l for j=0:j-1, l=0:l-1)
+        n′ = a*i + b*j
+        println((i, j, k, l) => n′)
+        n = min(n, n′)
+    end
+    return n
 end

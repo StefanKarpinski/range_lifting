@@ -423,10 +423,10 @@ macro update(cmp::Expr, body::Expr=quote end)
     end
 end
 
-lcm(args::T...) where {T<:AbstractFloat} =
-    T(Base.lcm(map(Int64, args)...))
-gcd(args::T...) where {T<:AbstractFloat} =
-    T(Base.gcd(map(Int64, args)...))
+lcmf(args::T...) where {T<:AbstractFloat} =
+    T(lcm(map(Int64, args)...))
+gcdf(args::T...) where {T<:AbstractFloat} =
+    T(gcd(map(Int64, args)...))
 
 function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     # handle negative step
