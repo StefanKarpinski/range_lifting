@@ -259,6 +259,45 @@ mediant_tree(iv::NTuple{2,Rational{<:Integer}}, d::Integer=5) =
 cross_det(x::Rational, y::Rational) = x.den*y.num - x.num*y.den
 cross_det(x::NTuple{2,Real}, y::NTuple{2,Real}) = x[2]*y[1] - x[1]*y[2]
 
+function lclc_brute(a::Int, b::Int, c::Int, d::Int)
+    if a < b
+        a, b = b, a
+    end
+    if c < d
+        c, d = d, c
+    end
+    if a < c
+        a, b, c, d = c, d, a, b
+    end
+
+    t = (0, 0, 0, 0)
+    n = lcm(b, d) + 1
+    for i = 0:fld(n,a),
+        j = 0:fld(n-a*i,b),
+        k = 0:fld(n-a*i-b*j,c),
+        l = 0:fld(n-a*i-b*j-c*k,d)
+        n′ = a*i + b*j
+        n′ > 0 || continue
+        n′ == c*k + d*l || continue
+        n′ < n || continue
+        t = (i, j, k, l)
+        n = n′
+    end
+    return t => n
+end
+
+for _ = 1:1000
+    a, b, c, d = rand(1:100, 4)
+    g_ab = gcd(a, b)
+    g_cd = gcd(c, d)
+    a ÷= g_ab
+    b ÷= g_ab
+    c ÷= g_cd
+    d ÷= g_cd
+    n = lclc(a, b, c, d)
+    @assert n == lclc_brute(a, b, c, d)[2]
+end
+
 # least common linear combination, i.e. smallest positive n such that
 #
 #   n == a*i + b*j == c*k + d*l
@@ -301,45 +340,4 @@ function lclc(a::Int, b::Int, c::Int, d::Int)
     end
     @show n
     return n
-end
-
-function lclc_brute(a::Int, b::Int, c::Int, d::Int)
-    if a < b
-        a, b = b, a
-    end
-    if c < d
-        c, d = d, c
-    end
-    if a < c
-        a, b, c, d = c, d, a, b
-    end
-
-    t = (0, 0, 0, 0)
-    n = lcm(b, d) + 1
-    for i = 0:fld(n,a),
-        j = 0:fld(n-a*i,b),
-        k = 0:fld(n-a*i-b*j,c),
-        l = 0:fld(n-a*i-b*j-c*k,d)
-        n′ = a*i + b*j
-        n′ > 0 || continue
-        n′ == c*k + d*l || continue
-        n′ < n || continue
-        t = (i, j, k, l)
-        n = n′
-    end
-    return t => n
-end
-
-for _ = 1:1000
-    a, b, c, d = rand(1:100, 4)
-    g_ab = gcd(a, b)
-    g_cd = gcd(c, d)
-    a ÷= g_ab
-    b ÷= g_ab
-    c ÷= g_cd
-    d ÷= g_cd
-    @assert gcd(a, b) == 1
-    @assert gcd(c, d) == 1
-    n = lclc(a, b, c, d)
-    @assert n == lclc_brute(a, b, c, d)[2]
 end
