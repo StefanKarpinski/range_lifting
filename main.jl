@@ -495,7 +495,7 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
     @assert S/D == s
     @assert (B - A)/S == N
     # compute the grid unit
-    G = gcd(A, B, S)
+    G = gcdf(A, B, S)
     g = TwicePrecision(G)/TwicePrecision(D)
     A /= G; B /= G; S /= G
     # check that inputs are hit

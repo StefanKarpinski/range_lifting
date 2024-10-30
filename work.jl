@@ -241,32 +241,6 @@ gen_ivals() = while true
     tr = cfrac_tree(r⁻)
 end
 
-# NON-WORKING ALGORITHM
-function smallest_denominator′(x::Rational{Int}, y::Rational{Int})
-    a, b = x.num, x.den
-    c, d = y.num, y.den
-    g, m, n = gcdx(b, d)
-    M = b*d÷g
-    u = mod(invmod(-a,b)*n*(d÷g), M)
-    v = mod(invmod(c,d)*m*(b÷g), M)
-    if u > v
-        u -= M
-    else
-        v -= M
-    end
-    D, i, j = gcdx(u, v)
-    @assert i ≥ 0 && j ≥ 0
-    i %= b
-    j %= d
-    s = 1
-    while (s*i % b)*d + (s*j % d)*b > (s*D)*(b*c - a*d)
-        s += 1
-    end
-    D = s*D
-    i = s*i % b
-    j = s*j % d
-end
-
 mediant(x::Rational, y::Rational) = (x.num + y.num)//(x.den + y.den)
 
 function mediant_tree(iv::NTuple{2,NTuple{2,Integer}}, d::Integer=5)
@@ -285,29 +259,13 @@ mediant_tree(iv::NTuple{2,Rational{<:Integer}}, d::Integer=5) =
 cross_det(x::Rational, y::Rational) = x.den*y.num - x.num*y.den
 cross_det(x::NTuple{2,Real}, y::NTuple{2,Real}) = x[2]*y[1] - x[1]*y[2]
 
-#=
-v = (x, y) = (1054//361, 2721//926)
-v = (x, y) = rand_ival()
-
-f = simplest_frac((x, y))
-cross_det(x, y)
-cross_det(x, f)
-cross_det(f, y)
-cross_det(x, mediant(x, f))
-cross_det(mediant(x, f), f)
-
-cross_det(f, mediant(f, y))
-cross_det(mediant(f, y), y)
-
-for _ = 1:1000
-    x, y = rand_ival()
-    1 in [cross_det(x, z) for z in ancestors(x)] &&
-    1 in [cross_det(z, y) for z in ancestors(y)] && continue
-    @show x, y
-end
-=#
-
-function lcc(a::Int, b::Int, c::Int, d::Int)
+# least common linear combination, i.e. smallest positive n such that
+#
+#   n == a*i + b*j == c*k + d*l
+#
+# for nonnegative i, j, k, l
+#
+function lclc(a::Int, b::Int, c::Int, d::Int)
     if a < b
         a, b = b, a
     end
@@ -317,27 +275,71 @@ function lcc(a::Int, b::Int, c::Int, d::Int)
     if a < c
         a, b, c, d = c, d, a, b
     end
-    println((a, b, c, d))
+    @show a, b, c, d
 
     g_bd, u_bd = gcdx(b, d)
     g_cd, u_cd = gcdx(c, d)
 
     n = b*d÷g_bd # solution when i = k = 0
-
-    for i = 0:fld(n-1,a)
+    i = 0
+    while a*i < n
         k = mod(a*i*u_cd, g_bd)
-        if i == k == 0
+        while c*k < n
+            if !(i == k == 0)
+                p = a*i - c*k
+                j = mod(-p*u_bd,d)÷g_bd
+                l = (b*j + p)÷d
+                @assert a*i + b*j == c*k + d*l
+                @assert !any(a*i + b*j == c*k + d*l for j=0:j-1, l=0:l-1)
+                n′ = a*i + b*j
+                println((i, j, k, l) => n′)
+                n = min(n, n′)
+            end
             k += g_bd
         end
-        c*k < n || continue
-        p = a*i - c*k
-        j = mod(-p*u_bd,d)÷g_bd
-        l = (b*j + p)÷d
-        @assert a*i + b*j == c*k + d*l
-        @assert !any(a*i + b*j == c*k + d*l for j=0:j-1, l=0:l-1)
-        n′ = a*i + b*j
-        println((i, j, k, l) => n′)
-        n = min(n, n′)
+        i += 1
     end
+    @show n
     return n
+end
+
+function lclc_brute(a::Int, b::Int, c::Int, d::Int)
+    if a < b
+        a, b = b, a
+    end
+    if c < d
+        c, d = d, c
+    end
+    if a < c
+        a, b, c, d = c, d, a, b
+    end
+
+    t = (0, 0, 0, 0)
+    n = lcm(b, d) + 1
+    for i = 0:fld(n,a),
+        j = 0:fld(n-a*i,b),
+        k = 0:fld(n-a*i-b*j,c),
+        l = 0:fld(n-a*i-b*j-c*k,d)
+        n′ = a*i + b*j
+        n′ > 0 || continue
+        n′ == c*k + d*l || continue
+        n′ < n || continue
+        t = (i, j, k, l)
+        n = n′
+    end
+    return t => n
+end
+
+for _ = 1:1000
+    a, b, c, d = rand(1:100, 4)
+    g_ab = gcd(a, b)
+    g_cd = gcd(c, d)
+    a ÷= g_ab
+    b ÷= g_ab
+    c ÷= g_cd
+    d ÷= g_cd
+    @assert gcd(a, b) == 1
+    @assert gcd(c, d) == 1
+    n = lclc(a, b, c, d)
+    @assert n == lclc_brute(a, b, c, d)[2]
 end
