@@ -301,12 +301,8 @@ end
 # for nonnegative i, j, k, l
 #
 function lclc(a::Int, b::Int, c::Int, d::Int)
-    if a < b
-        a, b = b, a
-    end
-    if c < d
-        c, d = d, c
-    end
+    a, b = minmax(a, b)
+    c, d = minmax(c, d)
     if a < c
         a, b, c, d = c, d, a, b
     end
