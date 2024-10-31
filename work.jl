@@ -296,46 +296,45 @@ end
 
 # least common linear combination, i.e. smallest positive n such that
 #
-#   n == a*i + b*j == c*k + d*l
+#   n == a1*i1 + b1*j1 == a2*i2 + b2*j2
 #
-# for nonnegative i, j, k, l
+# for nonnegative i1, j1, i2, j2
 #
-function lclc(a::Int, b::Int, c::Int, d::Int)
-    a, b = minmax(a, b)
-    c, d = minmax(c, d)
-    if a < c
-        a, b, c, d = c, d, a, b
+function lclc(a1::Int, b1::Int, a2::Int, b2::Int)
+    a1, b1 = minmax(a1, b1)
+    a2, b2 = minmax(a2, b2)
+    if a1 < a2
+        a1, b1, a2, b2 = a2, b2, a1, b1
     end
-    # @show a, b, c, d
 
-    g_bd, u_bd = gcdx(b, d)
-    g_cd, u_cd = gcdx(c, d)
+    g12, u12 = gcdx(b1, b2)
+    ___, u22 = gcdx(a2, b2)
 
-    b′, d′ = (b, d) .÷ g_bd
-    l_bd = b*d′ # lcm(b, d)
+    b1′, b2′ = (b1, b2) .÷ g12
+    b12′ = b1*b2′ # lcm(b1, b2)
 
-    n = l_bd # solution when i = k = 0
-    i = 0
-    while a*i < n
-        k = mod(a*i*u_cd, g_bd)
-        while c*k < n
-            if !(i == k == 0)
-                p = a*i - c*k
-                j = mod(-p*u_bd,d)÷g_bd
-                l = (b*j + p)÷d
-                while l < 0
-                    j += d′
-                    l += b′
+    n = b12′ # solution when i1 = i2 = 0
+    i1 = 0
+    while a1*i1 < n
+        i2 = mod(a1*i1*u22, g12)
+        while a2*i2 < n
+            if !(i1 == i2 == 0)
+                p = a1*i1 - a2*i2
+                j1 = mod(-p*u12,b2)÷g12
+                j2 = (b1*j1 + p)÷b2
+                while j2 < 0
+                    j1 += b2′
+                    j2 += b1′
                 end
-                # @assert a*i + b*j == c*k + d*l
-                # @assert !any(a*i + b*j == c*k + d*l for j=0:j-1, l=0:l-1)
-                n′ = a*i + b*j
-                # println((i, j, k, l) => n′)
+                # @assert a1*i1 + b1*j1 == a2*i2 + b2*j2
+                # @assert !any(a1*i1 + b1*j1 == a2*i2 + b2*j2 for j1=0:j1-1, j2=0:j2-1)
+                n′ = a1*i1 + b1*j1
+                # println((i1, j1, i2, j2) => n′)
                 n = min(n, n′)
             end
-            k += g_bd
+            i2 += g12
         end
-        i += 1
+        i1 += 1
     end
     return n
 end
