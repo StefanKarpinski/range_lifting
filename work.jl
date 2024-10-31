@@ -286,67 +286,6 @@ function lclc_brute(a::Int, b::Int, c::Int, d::Int)
     return t => n
 end
 
-# least common linear combination, i.e. smallest positive n such that
-#
-#   n == a*i + b*j == c*k + d*l
-#
-# for nonnegative i, j, k, l
-#
-function lclc(a::Int, b::Int, c::Int, d::Int)
-    @show a, b, c, d
-
-    g_ac, u_ac = gcdx(a, c)
-    g_ad, u_ad = gcdx(a, d)
-    g_bc, u_bc = gcdx(b, c)
-    g_bd, u_bd = gcdx(b, d)
-
-    if g_ac*g_bd < g_ad*g_bc
-        c, d = d, c
-        g_ac, g_ad = g_ad, g_ac
-        g_bc, g_bd = g_bd, g_bc
-        u_ac, u_ad = u_ad, u_ac
-        u_bc, u_bd = u_bd, u_bc
-    end
-    g = g_ac*g_bd
-
-    # TODO: handle p = 0
-
-    p_max(n) = max(
-        min(a*fld(n-1,a), d*fld(n-1,d)),
-        min(b*fld(n-1,b), c*fld(n-1,c)),
-    )
-
-    n = min(a, b)*min(c, d)
-    P = p_max(n)
-    p = 0
-    while (p += g) ≤ P
-        for p in (-p, p)
-            @show p
-            i = mod(+p*u_ac, c) ÷ g_ac
-            k = (a*i - p) ÷ c
-            while k < 0
-                i += a*c÷g_ac
-                k = (a*i - p) ÷ c
-            end
-            j = mod(-p*u_bd, d) ÷ g_bd
-            l = (b*j + p) ÷ d
-            while l < 0
-                j += b*d÷g_bd
-                l = (b*j + p) ÷ d
-            end
-            @assert a*i + b*j == c*k + d*l
-            n′ = a*i + b*j
-            println((i, j, k, l) => n′)
-            if n′ < n
-                n = n′
-                P = p_max(n)
-            end
-        end
-    end
-
-    return n
-end
-
 for _ = 1:1000
     a, b, c, d = rand(1:100, 4)
     g_ab = gcd(a, b)
@@ -357,4 +296,48 @@ for _ = 1:1000
     d ÷= g_cd
     n = lclc(a, b, c, d)
     @assert n == lclc_brute(a, b, c, d)[2]
+end
+
+# least common linear combination, i.e. smallest positive n such that
+#
+#   n == a*i + b*j == c*k + d*l
+#
+# for nonnegative i, j, k, l
+#
+function lclc(a::Int, b::Int, c::Int, d::Int)
+    if a < b
+        a, b = b, a
+    end
+    if c < d
+        c, d = d, c
+    end
+    if a < c
+        a, b, c, d = c, d, a, b
+    end
+    @show a, b, c, d
+
+    g_bd, u_bd = gcdx(b, d)
+    g_cd, u_cd = gcdx(c, d)
+
+    n = b*d÷g_bd # solution when i = k = 0
+    i = 0
+    while a*i < n
+        k = mod(a*i*u_cd, g_bd)
+        while c*k < n
+            if !(i == k == 0)
+                p = a*i - c*k
+                j = mod(-p*u_bd,d)÷g_bd
+                l = (b*j + p)÷d
+                @assert a*i + b*j == c*k + d*l
+                @assert !any(a*i + b*j == c*k + d*l for j=0:j-1, l=0:l-1)
+                n′ = a*i + b*j
+                println((i, j, k, l) => n′)
+                n = min(n, n′)
+            end
+            k += g_bd
+        end
+        i += 1
+    end
+    @show n
+    return n
 end
