@@ -270,32 +270,28 @@ function lclc_brute(a::Int, b::Int, c::Int, d::Int)
         a, b, c, d = c, d, a, b
     end
 
-    t = (0, 0, 0, 0)
-    n = lcm(b, d) + 1
-    for i = 0:fld(n,a),
-        j = 0:fld(n-a*i,b),
-        k = 0:fld(n-a*i-b*j,c),
-        l = 0:fld(n-a*i-b*j-c*k,d)
-        n′ = a*i + b*j
-        n′ > 0 || continue
-        n′ == c*k + d*l || continue
-        n′ < n || continue
-        t = (i, j, k, l)
-        n = n′
+    g = gcd(b, d)
+    n = b*d÷g # lcm(b, d)
+    # t = (0, d÷g, 0, b÷g)
+    i = 0
+    while a*i < n
+        j = i == 0 ? 1 : 0
+        while (n′ = a*i + b*j) < n
+            k = 0
+            while k*c ≤ n′
+                l, r = divrem(n′ - k*c, d)
+                if r == 0
+                    # t = (i, j, k, l)
+                    n = n′
+                    break
+                end
+                k += 1
+            end
+            j += 1
+        end
+        i += 1
     end
-    return t => n
-end
-
-for _ = 1:1000
-    a, b, c, d = rand(1:100, 4)
-    g_ab = gcd(a, b)
-    g_cd = gcd(c, d)
-    a ÷= g_ab
-    b ÷= g_ab
-    c ÷= g_cd
-    d ÷= g_cd
-    n = lclc(a, b, c, d)
-    @assert n == lclc_brute(a, b, c, d)[2]
+    return n
 end
 
 # least common linear combination, i.e. smallest positive n such that
@@ -314,12 +310,15 @@ function lclc(a::Int, b::Int, c::Int, d::Int)
     if a < c
         a, b, c, d = c, d, a, b
     end
-    @show a, b, c, d
+    # @show a, b, c, d
 
     g_bd, u_bd = gcdx(b, d)
     g_cd, u_cd = gcdx(c, d)
 
-    n = b*d÷g_bd # solution when i = k = 0
+    b′, d′ = (b, d) .÷ g_bd
+    l_bd = b*d′ # lcm(b, d)
+
+    n = l_bd # solution when i = k = 0
     i = 0
     while a*i < n
         k = mod(a*i*u_cd, g_bd)
@@ -328,16 +327,37 @@ function lclc(a::Int, b::Int, c::Int, d::Int)
                 p = a*i - c*k
                 j = mod(-p*u_bd,d)÷g_bd
                 l = (b*j + p)÷d
-                @assert a*i + b*j == c*k + d*l
-                @assert !any(a*i + b*j == c*k + d*l for j=0:j-1, l=0:l-1)
+                while l < 0
+                    j += d′
+                    l += b′
+                end
+                # @assert a*i + b*j == c*k + d*l
+                # @assert !any(a*i + b*j == c*k + d*l for j=0:j-1, l=0:l-1)
                 n′ = a*i + b*j
-                println((i, j, k, l) => n′)
+                # println((i, j, k, l) => n′)
                 n = min(n, n′)
             end
             k += g_bd
         end
         i += 1
     end
-    @show n
     return n
 end
+
+#=
+for _ = 1:100000
+    a, b, c, d = rand(1:100, 4)
+    g_ab = gcd(a, b)
+    g_cd = gcd(c, d)
+    a ÷= g_ab
+    b ÷= g_ab
+    c ÷= g_cd
+    d ÷= g_cd
+    n = lclc(a, b, c, d)
+    @assert n == lclc_brute(a, b, c, d)
+    g = min(gcd(a,c), gcd(a,d), gcd(b,c), gcd(b,d))
+    if g > 2
+        println("$g: ", repr((a, b, c, d) => n))
+    end
+end
+=#
