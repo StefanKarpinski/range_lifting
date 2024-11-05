@@ -166,6 +166,27 @@ function partition(x::Real, y::Real)
     return P
 end
 
+function expand_ival(x::Real, y::Real)
+    if cross_det(x, y) == 1
+        a1, b1 = numerator(x), denominator(x)
+        a2, b2 = numerator(y), denominator(y)
+        g = a1*a2 - a1 - a2
+        x′ = (a1*g)//(b1*g + 1)
+        y′ = (a2*g)//(b2*g - 1)
+        return x′, y′
+    else
+        x′, y′ = x, y
+        P = partition((x, y))
+        for i = 1:length(P)-1
+            x_i, y_i = P[i], P[i+1]
+            x″, y″ = expand_ival(x_i, y_i)
+            x′ = min(x′, x″)
+            y′ = max(y′, y″)
+        end
+        return x′, y′
+    end
+end
+
 function frac(A::Vector{T}) where {T<:Integer}
     n, d = one(T), zero(T)
     for a in Iterators.reverse(A)
