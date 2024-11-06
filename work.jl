@@ -193,16 +193,18 @@ function commonize_ivals(vs::NTuple{2,Real}...)
         x′, y′ = expand_ival(x, y)
         # NOTE: simplified expr for x*x′/(x-x′) would help efficiency
         n = max(n, ceil(Int, 2x*x′/(x-x′)))
-        n = max(n, ceil(Int, 2y*y′/(y′-y))-1)
+        n = max(n, ceil(Int, y*y′/(y′-y))-1)
     end
     n = nextpow(2, n)
     ds = map(vs) do (x, y)
         d_x = cld(n, x) | 1
         d_y = fld(n+1, y)
-        # x′, y′ = expand_ival(x, y)
-        # @assert x′ < n//d_x ≤ x < y ≤ (n+1)//d_y < y′
+        x′, y′ = expand_ival(x, y)
+        @assert x′ < n//d_x ≤ x < y ≤ (n+1)//d_y < y′
         d = (n+1)*d_x - n*d_y
+        @assert isodd(d)
         # S([x, y]) == <n, n+1>/d (numerical semigroups)
+        return d
     end
     is = map(ds) do d
         invmod(d, Int) & (n-1)
