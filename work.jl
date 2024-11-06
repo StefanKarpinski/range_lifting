@@ -2,15 +2,22 @@ function rand_ival(;
     max::Int64 = 1000,
     offset::Int64 = 0,
 )
-    b = rand(2:max)
-    a = rand(1:b-1)
-    d = rand(2:max)
-    c = rand(1:d-1)
-    lo, hi = a//b, c//d
-    if hi < lo
-        lo, hi = hi, lo
+    while true
+        b = rand(2:max)
+        a = rand(1:b-1)
+        d = rand(2:max)
+        c = rand(1:d-1)
+        lo, hi = a//b, c//d
+        if hi < lo
+            lo, hi = hi, lo
+        end
+        lo += offset
+        hi += offset
+        # ensure there are some gaps in numerical semigroup
+        if sum(ceil(k/hi) > floor(k/lo) for k = 1:20) ≥ 2
+            return lo, hi
+        end
     end
-    return offset + lo, offset + hi
 end
 
 function simplest_frac(x::Rational, y::Rational)
@@ -30,6 +37,10 @@ function simplest_frac(x::Rational, y::Rational)
     end
 
     return (a + b)//(c + d)
+end
+
+function simplest_frac((x, y)::NTuple{2,Rational})
+    simplest_frac(x, y)
 end
 
 function smallest_denominator(x::Rational, y::Rational)
@@ -166,6 +177,10 @@ function partition(x::Real, y::Real)
     return P
 end
 
+function partition((x, y)::NTuple{2,Real})
+    partition(x, y)
+end
+
 function expand_ival(x::Real, y::Real)
     if cross_det(x, y) == 1
         a1, b1 = numerator(x), denominator(x)
@@ -176,7 +191,7 @@ function expand_ival(x::Real, y::Real)
         return x′, y′
     else
         x′, y′ = x, y
-        P = partition((x, y))
+        P = partition(x, y)
         for i = 1:length(P)-1
             x_i, y_i = P[i], P[i+1]
             x″, y″ = expand_ival(x_i, y_i)
@@ -185,6 +200,10 @@ function expand_ival(x::Real, y::Real)
         end
         return x′, y′
     end
+end
+
+function expand_ival((x, y)::NTuple{2,Real})
+    expand_ival(x, y)
 end
 
 function commonize_ivals(vs::NTuple{2,Real}...)
@@ -249,6 +268,8 @@ print_btree(v::Vector) = print_btree(stdout, v)
 gen_ivals() = while true
     v1 = rand_ival()
     v2 = rand_ival()
+
+    # check that there are some gaps
 
     # simplest fractions in each
     f1 = simplest_frac(v1); d1 = f1.den
