@@ -181,6 +181,41 @@ function partition((x, y)::NTuple{2,Real})
     partition(x, y)
 end
 
+function gaps(x::Real, y::Real)
+    P = partition(x, y)
+    g, i = findmin(1:length(P)-1) do i
+        a1 = numerator(P[i])
+        a2 = numerator(P[i+1])
+        a1*a2 - a1 - a2
+    end
+    a1 = numerator(P[i])
+    a2 = numerator(P[i+1])
+    G = Int[]
+    for j = 1:a2-1
+        for k = 1:a1-1
+            g = a1*a2 - j*a1 - k*a2
+            g < 0 && break
+            ceil(g/y) ≤ floor(g/x) && continue
+            push!(G, g)
+        end
+    end
+    return sort!(G)
+end
+
+function gaps((x, y)::NTuple{2,Real})
+    gaps(x, y)
+end
+
+#=
+for _ = 1:45
+    x, y = rand_ival()
+    G = gaps(x, y)
+    g_x = argmax(g->g/ceil(g/x), G)
+    g_y = argmin(g->g/floor(g/y), G)
+    @show x, y, G[end], g_x, g_y
+end
+=#
+
 function expand_ival(x::Real, y::Real)
     if cross_det(x, y) == 1
         a1, b1 = numerator(x), denominator(x)
@@ -211,8 +246,8 @@ function commonize_ivals(vs::NTuple{2,Real}...)
     for (x, y) in vs
         x′, y′ = expand_ival(x, y)
         # NOTE: simplified expr for x*x′/(x-x′) would help efficiency
-        n = max(n, ceil(Int, 2x*x′/(x-x′)))
-        n = max(n, ceil(Int, y*y′/(y′-y))-1)
+        n = max(n, @show ceil(Int, 2x*x′/(x-x′)))
+        n = max(n, @show ceil(Int, y*y′/(y′-y))-1)
     end
     n = nextpow(2, n)
     ds = map(vs) do (x, y)
@@ -224,9 +259,6 @@ function commonize_ivals(vs::NTuple{2,Real}...)
         @assert isodd(d)
         # S([x, y]) == <n, n+1>/d (numerical semigroups)
         return d
-    end
-    is = map(ds) do d
-        invmod(d, Int) & (n-1)
     end
     return n, ds...
 end
