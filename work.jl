@@ -225,13 +225,10 @@ function expand_ival(x::Real, y::Real)
         y′ = (a2*g)//(b2*g - 1)
         return x′, y′
     else
-        x′, y′ = x, y
-        P = partition(x, y)
-        for i = 1:length(P)-1
-            x_i, y_i = P[i], P[i+1]
-            x″, y″ = expand_ival(x_i, y_i)
-            x′ = min(x′, x″)
-            y′ = max(y′, y″)
+        x′, y′ = 0//1, 1//0
+        for g in gaps(x, y)
+            x′ = max(x′, g/ceil(g/x))
+            y′ = min(y′, g/floor(g/y))
         end
         return x′, y′
     end
