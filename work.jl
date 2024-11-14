@@ -206,16 +206,6 @@ function gaps((x, y)::NTuple{2,Real})
     gaps(x, y)
 end
 
-#=
-for _ = 1:45
-    x, y = rand_ival()
-    G = gaps(x, y)
-    g_x = argmax(g->g/ceil(g/x), G)
-    g_y = argmin(g->g/floor(g/y), G)
-    @show x, y, G[end], g_x, g_y
-end
-=#
-
 function expand_ival(x::Real, y::Real)
     if cross_det(x, y) == 1
         a1, b1 = numerator(x), denominator(x)
@@ -359,6 +349,20 @@ mediant_tree(iv::NTuple{2,Rational{<:Integer}}, d::Integer=5) =
 cross_det(x::Rational, y::Rational) = x.den*y.num - x.num*y.den
 cross_det(x::NTuple{2,Real}, y::NTuple{2,Real}) = x[2]*y[1] - x[1]*y[2]
 
+function dgcdx(a::Int, b::Int)
+    g, u, v = gcdx(a, b)
+    @assert g == u*a + v*b
+    v = -v
+    @assert g == u*a - v*b
+    if u < 0 || v < 0
+        u += b ÷ g
+        v += a ÷ g
+    end
+    @assert u ≥ 0 && v ≥ 0
+    @assert g == u*a - v*b
+    return g, u, v
+end
+
 function lclc_brute(a::Int, b::Int, c::Int, d::Int)
     if a < b
         a, b = b, a
@@ -429,7 +433,7 @@ function lclc(a1::Int, b1::Int, a2::Int, b2::Int)
                 # @assert a1*i1 + b1*j1 == a2*i2 + b2*j2
                 # @assert !any(a1*i1 + b1*j1 == a2*i2 + b2*j2 for j1=0:j1-1, j2=0:j2-1)
                 n′ = a1*i1 + b1*j1
-                # println((i1, j1, i2, j2) => n′)
+                println((i1, j1, i2, j2) => n′)
                 n = min(n, n′)
             end
             i2 += g12
