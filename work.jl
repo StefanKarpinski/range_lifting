@@ -420,10 +420,8 @@ for _ = 1:1000
     end
     @show a1, b1, a2, b2
     n, (i1, j1, i2, j2) = lclc_brute(a1, b1, a2, b2)
-    g = gcd(b1,b2)
-    h = gcd(b1,a2)
-    @assert mod(i2, g) == mod(i1*a1*invmod(a2,g), g)
-    @assert mod(j2, h) == mod(i1*a1*invmod(b2,h), h)
+    @assert mod(a1*i1 - a2*i2, gcd(b1,b2)) == 0
+    @assert mod(a1*i1 - b2*j2, gcd(b1,a2)) == 0
 end
 
 # least common linear combination, i.e. smallest positive n such that
