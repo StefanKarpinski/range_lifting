@@ -370,16 +370,6 @@ function dgcdx(a::Int, b::Int)
 end
 
 function lclc_brute(a::Int, b::Int, c::Int, d::Int)
-    if a < b
-        a, b = b, a
-    end
-    if c < d
-        c, d = d, c
-    end
-    if a < c
-        a, b, c, d = c, d, a, b
-    end
-
     g = gcd(b, d)
     n = b*d÷g # lcm(b, d)
     t = (0, d÷g, 0, b÷g)
@@ -412,20 +402,15 @@ for _ = 1:1000
     # gcd(a1, b2) > 1  || continue
     # gcd(b1, a2) > 1  || continue
     # gcd(b1, b2) > 1  || continue
-    b1, a1 = minmax(b1, a1)
-    b2, a2 = minmax(b2, a2)
-    if a1 < a2
-        a1, a2 = a2, a1
-        b1, b2 = b2, b1
-    end
     @show a1, b1, a2, b2
     n, (i1, j1, i2, j2) = lclc_brute(a1, b1, a2, b2)
+    @assert n == a1*i1 + b1*j1 == a2*i2 + b2*j2
     g, u, v = gcdx(b1, b2)
     b1′ = b1 ÷ g
     b2′ = b2 ÷ g
     l = b1*b2′ # lcm(b1, b2)
     @assert mod(i2 - i1*a1*invmod(a2, g), g) == 0
-    @assert l == n || mod(a1*i1*v*b2′ + a2*i2*u*b1′, l) == n
+    @assert mod1(a1*i1*v*b2′ + a2*i2*u*b1′, l) == n
 end
 
 # least common linear combination, i.e. smallest positive n such that
