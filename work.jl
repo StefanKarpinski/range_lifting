@@ -394,7 +394,8 @@ function lclc_brute(a::Int, b::Int, c::Int, d::Int)
     return n => t
 end
 
-for _ = 1:1000
+#=
+for _ = 1:10000
     a1, b1, a2, b2 = rand(1:50, 4)
     gcd(a1, b1) == 1 || continue
     gcd(a2, b2) == 1 || continue
@@ -411,7 +412,10 @@ for _ = 1:1000
     l = b1*b2′ # lcm(b1, b2)
     @assert mod(i2 - i1*a1*invmod(a2, g), g) == 0
     @assert mod1(a1*i1*v*b2′ + a2*i2*u*b1′, l) == n
+    i2′ = mod(i1*a1*invmod(a2, g), g)
+    @assert mod1(a1*i1*v*b2′ + a2*i2′*u*b1′, l) == n
 end
+=#
 
 # least common linear combination, i.e. smallest positive n such that
 #
@@ -427,40 +431,31 @@ function lclc(a1::Int, b1::Int, a2::Int, b2::Int)
         b1, b2 = b2, b1
     end
 
-    g12, u12 = gcdx(b1, b2)
-    ___, u22 = gcdx(a2, b2)
+    g, u, v = gcdx(b1, b2)
+    a2⁻¹ = invmod(a2, g)
+    b1′ = b1 ÷ g
+    b2′ = b2 ÷ g
+    l = b1*b2′ # lcm(b1, b2)
 
-    b1′, b2′ = (b1, b2) .÷ g12
-    b12′ = b1*b2′ # lcm(b1, b2)
-
-    n = b12′ # solution when i1 = i2 = 0
-    i1 = 0
-    while a1*i1 < n
-        i2 = mod(a1*i1*u22, g12)
-        while a2*i2 < n
-            if !(i1 == i2 == 0)
-                p = a1*i1 - a2*i2
-                j1 = mod(-p*u12,b2)÷g12
-                j2 = (b1*j1 + p)÷b2
-                while j2 < 0
-                    j1 += b2′
-                    j2 += b1′
-                end
-                # @assert a1*i1 + b1*j1 == a2*i2 + b2*j2
-                # @assert !any(a1*i1 + b1*j1 == a2*i2 + b2*j2 for j1=0:j1-1, j2=0:j2-1)
-                n′ = a1*i1 + b1*j1
-                println((i1, j1, i2, j2) => n′)
-                n = min(n, n′)
+    n = l
+    i1a1 = 0
+    while i1a1 < n
+        i2a2 = mod(i1a1*a2⁻¹, g)*a2
+        while i2a2 < n
+            n′ = mod(i1a1*v*b2′ + i2a2*u*b1′, l)
+            if max(1, i1a1, i2a2) ≤ n′ < n
+                n = n′
             end
-            i2 += g12
+            i2a2 += g*a2
         end
-        i1 += 1
+        i1a1 += a1
     end
+    
     return n
 end
 
 #=
-for _ = 1:1
+for _ = 1:1000
     a, b, c, d = rand(1:100, 4)
     g_ab = gcd(a, b)
     g_cd = gcd(c, d)
@@ -469,7 +464,10 @@ for _ = 1:1
     c ÷= g_cd
     d ÷= g_cd
     n = lclc(a, b, c, d)
-    @assert n == lclc_brute(a, b, c, d)
+    if n != lclc_brute(a, b, c, d)[1]
+        @show a, b, c, d
+        break
+    end
     g = min(gcd(a,c), gcd(a,d), gcd(b,c), gcd(b,d))
     if g > 2
         println("$g: ", repr((a, b, c, d) => n))
