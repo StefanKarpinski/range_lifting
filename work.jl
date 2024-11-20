@@ -66,6 +66,12 @@ function smallest_denominator(vs::NTuple{2,Real}...)
     end
 end
 
+smallest_numerator(x::Real, y::Real) =
+    smallest_denominator(inv(y), inv(x))
+
+smallest_numerator(vs::NTuple{2,Real}...) =
+    smallest_denominator(map(v->map(inv, reverse(v)), vs)...)
+
 function cfrac(x::Real)
     A = Int64[]
     while true
@@ -376,7 +382,7 @@ function lclc_brute(a::Int, b::Int, c::Int, d::Int)
 
     g = gcd(b, d)
     n = b*d÷g # lcm(b, d)
-    # t = (0, d÷g, 0, b÷g)
+    t = (0, d÷g, 0, b÷g)
     i = 0
     while a*i < n
         j = i == 0 ? 1 : 0
@@ -385,7 +391,7 @@ function lclc_brute(a::Int, b::Int, c::Int, d::Int)
             while k*c ≤ n′
                 l, r = divrem(n′ - k*c, d)
                 if r == 0
-                    # t = (i, j, k, l)
+                    t = (i, j, k, l)
                     n = n′
                     break
                 end
@@ -395,7 +401,29 @@ function lclc_brute(a::Int, b::Int, c::Int, d::Int)
         end
         i += 1
     end
-    return n
+    return n => t
+end
+
+for _ = 1:1000
+    a1, b1, a2, b2 = rand(1:50, 4)
+    gcd(a1, b1) == 1 || continue
+    gcd(a2, b2) == 1 || continue
+    # gcd(a1, a2) > 1  || continue
+    # gcd(a1, b2) > 1  || continue
+    # gcd(b1, a2) > 1  || continue
+    # gcd(b1, b2) > 1  || continue
+    b1, a1 = minmax(b1, a1)
+    b2, a2 = minmax(b2, a2)
+    if a1 < a2
+        a1, a2 = a2, a1
+        b1, b2 = b2, b1
+    end
+    @show a1, b1, a2, b2
+    n, (i1, j1, i2, j2) = lclc_brute(a1, b1, a2, b2)
+    g = gcd(b1,b2)
+    h = gcd(b1,a2)
+    @assert mod(i2, g) == mod(i1*a1*invmod(a2,g), g)
+    @assert mod(j2, h) == mod(i1*a1*invmod(b2,h), h)
 end
 
 # least common linear combination, i.e. smallest positive n such that
@@ -405,10 +433,11 @@ end
 # for nonnegative i1, j1, i2, j2
 #
 function lclc(a1::Int, b1::Int, a2::Int, b2::Int)
-    a1, b1 = minmax(a1, b1)
-    a2, b2 = minmax(a2, b2)
+    b1, a1 = minmax(b1, a1)
+    b2, a2 = minmax(b2, a2)
     if a1 < a2
-        a1, b1, a2, b2 = a2, b2, a1, b1
+        a1, a2 = a2, a1
+        b1, b2 = b2, b1
     end
 
     g12, u12 = gcdx(b1, b2)
