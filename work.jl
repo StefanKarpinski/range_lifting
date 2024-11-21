@@ -493,27 +493,32 @@ function lclc(
     return n
 end
 
+function rand_coprime(n::Int; min::Int=1, max::Int=100)
+    while true
+        t = rand(min:max, n)
+        all(gcd(t[i],t[j]) == 1 for i=1:n-1 for j=i+1:n) && return t
+    end
+end
+
 #=
 for _ = 1:1000
-    local a1, b1, a2, b2
-    while true
-        a1, b1, a2, b2 = rand(1:100, 4)
-        gcd(a1, b1) == gcd(a2, b2) == 1 && break
-    end
+    a1, b1 = rand_coprime(2)
+    a2, b2 = rand_coprime(2)
     n = lclc(a1, b1, a2, b2)
-    i1, j1 = coeffs(n, a1, b1)
-    i2, j2 = coeffs(n, a2, b2)
+    @assert !isnothing(coeffs(n, a1, b1))
+    @assert !isnothing(coeffs(n, a2, b2))
+    for n′ = 1:n-1
+        @assert isnothing(coeffs(n′, a1, b1)) ||
+                isnothing(coeffs(n′, a2, b2))
+
+    end
 end
 =#
 
 #=
 for _ = 1:1000
-    local a1, b1, c1, a2, b2, c2
-    while true
-        a1, b1, c1, a2, b2, c2 = rand(1:100, 6)
-        gcd(a1, b1) == gcd(b1, c1) == 
-        gcd(a2, b2) == gcd(b2, c2) == 1 && break
-    end
+    a1, b1, c1 = rand_coprime(3)
+    a2, b2, c2 = rand_coprime(3)
     @show a1, b1, c1, a2, b2, c2
     n = lclc(a1, b1, c1, a2, b2, c2)
     @assert !isnothing(coeffs(c1*n, a1, b1))
