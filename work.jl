@@ -500,6 +500,13 @@ function rand_coprime(n::Int; min::Int=1, max::Int=100)
     end
 end
 
+function coeffs(n::Int, a::Int, b::Int)
+    for i = 0:n÷a, j = 0:(n-a*i)÷b
+        a*i + b*j == n && return (i, j)
+    end
+    nothing
+end
+
 #=
 for _ = 1:1000
     a1, b1 = rand_coprime(2)
@@ -529,10 +536,3 @@ for _ = 1:1000
     end
 end
 =#
-
-function coeffs(n::Int, a::Int, b::Int)
-    for i = 0:n÷a, j = 0:n÷b
-        a*i + b*j == n && return (i, j)
-    end
-    nothing
-end
