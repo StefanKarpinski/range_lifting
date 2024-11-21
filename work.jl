@@ -456,8 +456,8 @@ function lclc(
     a1::Int, b1::Int, c1::Int,
     a2::Int, b2::Int, c2::Int,
 )
-    # b1, a1 = minmax(b1, a1)
-    # b2, a2 = minmax(b2, a2)
+    b1, a1 = minmax(b1, a1)
+    b2, a2 = minmax(b2, a2)
     if a1*c2 < a2*c1
         a1, a2 = a2, a1
         b1, b2 = b2, b1
@@ -495,7 +495,7 @@ end
 
 function rand_coprime(n::Int; min::Int=1, max::Int=100)
     while true
-        t = rand(min:max, n)
+        t = ntuple(i -> rand(min:max), n)
         all(gcd(t[i],t[j]) == 1 for i=1:n-1 for j=i+1:n) && return t
     end
 end
