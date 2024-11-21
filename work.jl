@@ -394,6 +394,35 @@ function lclc_brute(a::Int, b::Int, c::Int, d::Int)
     return n => t
 end
 
+# compute: m(<a1, b1>/c1 ∩ <a2, b2>/c2)
+function lclc_brute(
+    a1::Int, b1::Int, c1::Int,
+    a2::Int, b2::Int, c2::Int,
+)
+    n = lcm(b1*c1, b2*c2) ÷ lcm(c1, c2)
+    i1 = 0
+    while a1*i1 < c1*n
+        j1 = i1 == 0 ? 1 : 0
+        while a1*i1 + b1*j1 < c1*n
+            n′, r = divrem(a1*i1 + b1*j1, c1)
+            if n′ < n && r == 0
+                i2 = 0
+                while a2*i2 ≤ c2*n′
+                    j2, r = divrem(c2*n′ - a2*i2, b2)
+                    if r == 0
+                        n = n′
+                        break
+                    end
+                    i2 += 1
+                end
+            end
+            j1 += 1
+        end
+        i1 += 1
+    end
+    return n
+end
+
 #=
 for _ = 1:10000
     a1, b1, a2, b2 = rand(1:50, 4)
@@ -441,9 +470,10 @@ function lclc(a1::Int, b1::Int, a2::Int, b2::Int)
     i1a1 = 0
     while i1a1 < n
         i2a2 = mod(i1a1*a2⁻¹, g)*a2
+        i1a1 == i2a2 && (i2a2 += g*a2)
         while i2a2 < n
             n′ = mod(i1a1*v*b2′ + i2a2*u*b1′, l)
-            if max(1, i1a1, i2a2) ≤ n′ < n
+            if max(i1a1, i2a2) ≤ n′ < n
                 n = n′
             end
             i2a2 += g*a2
@@ -456,21 +486,37 @@ end
 
 #=
 for _ = 1:1000
-    a, b, c, d = rand(1:100, 4)
-    g_ab = gcd(a, b)
-    g_cd = gcd(c, d)
-    a ÷= g_ab
-    b ÷= g_ab
-    c ÷= g_cd
-    d ÷= g_cd
-    n = lclc(a, b, c, d)
-    if n != lclc_brute(a, b, c, d)[1]
-        @show a, b, c, d
-        break
+    local a1, b1, a2, b2
+    while true
+        a1, b1, a2, b2 = rand(1:100, 4)
+        gcd(a1, b1) == gcd(a2, b2) == 1 && break
     end
-    g = min(gcd(a,c), gcd(a,d), gcd(b,c), gcd(b,d))
-    if g > 2
-        println("$g: ", repr((a, b, c, d) => n))
-    end
+    n = lclc(a1, b1, a2, b2)
+    i1, j1 = coeffs(n, a1, b1)
+    i2, j2 = coeffs(n, a2, b2)
 end
 =#
+
+#=
+for _ = 1:1000
+    local a1, b1, c1, a2, b2, c2
+    while true
+        a1, b1, c1, a2, b2, c2 = rand(1:100, 6)
+        gcd(a1, b1) == gcd(b1, c1) ==
+        gcd(a2, b2) == gcd(b2, c2) == 1 && break
+    end
+    a1′ = mod(a1 * invmod(c1, b1), b1)
+    a2′ = mod(a2 * invmod(c2, b2), b2)
+    n = lclc(a1′, b1, a2′, b2)
+    coeffs(c1*n, a1, b1)
+    coeffs(c2*n, a2, b2)
+end
+=#
+
+
+function coeffs(n::Int, a::Int, b::Int)
+    for i = 0:n÷a, j = 0:n÷b
+        a*i + b*j == n && return (i, j)
+    end
+    error("infeasible")
+end
