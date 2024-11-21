@@ -399,7 +399,7 @@ function lclc_brute(
     a1::Int, b1::Int, c1::Int,
     a2::Int, b2::Int, c2::Int,
 )
-    n = lcm(b1*c1, b2*c2) ÷ lcm(c1, c2)
+    n = lcm(b1, b2)
     i1 = 0
     while a1*i1 < c1*n
         j1 = i1 == 0 ? 1 : 0
@@ -475,12 +475,12 @@ function lclc(
     b2′ = b2 ÷ g
     l = b1*b2′ # lcm(b1, b2)
 
-    n = l
+    n = l # solution when i1 = i1 = 0
     i1 = 0
-    while i1*a1 < c1*n
+    while i1*a1 < n*c1
         i2 = mod(i1*a1*c1⁻¹*a2⁻¹*c2, g)
         i1 == i2 == 0 && (i2 += g)
-        while i2*a2 < c2*n
+        while i2*a2 < n*c2
             n′ = mod(i1*a1*c1⁻¹*v*b2′ + i2*a2*c2⁻¹*u*b1′, l)
             if n′ < n && n′*c1 ≥ i1*a1 && n′*c2 ≥ i2*a2
                 n = n′
