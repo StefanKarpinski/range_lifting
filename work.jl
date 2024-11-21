@@ -452,33 +452,42 @@ end
 #
 # for nonnegative i1, j1, i2, j2
 #
-function lclc(a1::Int, b1::Int, a2::Int, b2::Int)
-    b1, a1 = minmax(b1, a1)
-    b2, a2 = minmax(b2, a2)
-    if a1 < a2
+function lclc(
+    a1::Int, b1::Int, c1::Int,
+    a2::Int, b2::Int, c2::Int,
+)
+    # b1, a1 = minmax(b1, a1)
+    # b2, a2 = minmax(b2, a2)
+    if a1*c2 < a2*c1
         a1, a2 = a2, a1
         b1, b2 = b2, b1
+        c1, c2 = c2, c1
     end
 
+    # inverses we need
+    c1⁻¹ = invmod(c1, b1)
+    c2⁻¹ = invmod(c2, b2)
+    a2⁻¹ = invmod(a2, b2)
+
+    # gcd/lcm of b1, b2
     g, u, v = gcdx(b1, b2)
-    a2⁻¹ = invmod(a2, g)
     b1′ = b1 ÷ g
     b2′ = b2 ÷ g
     l = b1*b2′ # lcm(b1, b2)
 
     n = l
-    i1a1 = 0
-    while i1a1 < n
-        i2a2 = mod(i1a1*a2⁻¹, g)*a2
-        i1a1 == i2a2 && (i2a2 += g*a2)
-        while i2a2 < n
-            n′ = mod(i1a1*v*b2′ + i2a2*u*b1′, l)
-            if max(i1a1, i2a2) ≤ n′ < n
+    i1 = 0
+    while i1*a1 < c1*n
+        i2 = mod(i1*a1*c1⁻¹*a2⁻¹*c2, g)
+        i1 == i2 == 0 && (i2 += g)
+        while i2*a2 < c2*n
+            n′ = mod(i1*a1*c1⁻¹*v*b2′ + i2*a2*c2⁻¹*u*b1′, l)
+            if n′ < n && n′*c1 ≥ i1*a1 && n′*c2 ≥ i2*a2
                 n = n′
             end
-            i2a2 += g*a2
+            i2 += g
         end
-        i1a1 += a1
+        i1 += 1
     end
     
     return n
@@ -502,21 +511,23 @@ for _ = 1:1000
     local a1, b1, c1, a2, b2, c2
     while true
         a1, b1, c1, a2, b2, c2 = rand(1:100, 6)
-        gcd(a1, b1) == gcd(b1, c1) ==
+        gcd(a1, b1) == gcd(b1, c1) == 
         gcd(a2, b2) == gcd(b2, c2) == 1 && break
     end
-    a1′ = mod(a1 * invmod(c1, b1), b1)
-    a2′ = mod(a2 * invmod(c2, b2), b2)
-    n = lclc(a1′, b1, a2′, b2)
-    coeffs(c1*n, a1, b1)
-    coeffs(c2*n, a2, b2)
+    @show a1, b1, c1, a2, b2, c2
+    n = lclc(a1, b1, c1, a2, b2, c2)
+    @assert !isnothing(coeffs(c1*n, a1, b1))
+    @assert !isnothing(coeffs(c2*n, a2, b2))
+    for n′ = 1:n-1
+        @assert isnothing(coeffs(c1*n′, a1, b1)) ||
+                isnothing(coeffs(c2*n′, a2, b2))
+    end
 end
 =#
-
 
 function coeffs(n::Int, a::Int, b::Int)
     for i = 0:n÷a, j = 0:n÷b
         a*i + b*j == n && return (i, j)
     end
-    error("infeasible")
+    nothing
 end
