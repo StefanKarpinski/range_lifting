@@ -469,7 +469,7 @@ function lclc(
     c2⁻¹ = invmod(c2, b2)
     a2⁻¹ = invmod(a2, b2)
 
-    # gcd/lcm of b1, b2
+    # gcd & lcm of b1, b2
     g, u, v = gcdx(b1, b2)
     b1′ = b1 ÷ g
     b2′ = b2 ÷ g
@@ -489,7 +489,7 @@ function lclc(
         end
         i1 += 1
     end
-    
+
     return n
 end
 
