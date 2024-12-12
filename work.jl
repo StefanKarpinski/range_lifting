@@ -8,13 +8,14 @@ function rand_ival(;
         d = rand(2:max)
         c = rand(1:d-1)
         lo, hi = a//b, c//d
+        lo == hi && continue
         if hi < lo
             lo, hi = hi, lo
         end
         lo += offset
         hi += offset
         # ensure there are some gaps in numerical semigroup
-        if sum(ceil(k/hi) > floor(k/lo) for k = 1:20) ≥ 2
+        if sum(ceil(k/hi) > floor(k/lo) for k = 1:20) ≥ 5
             return lo, hi
         end
     end
@@ -294,47 +295,32 @@ gen_ivals() = while true
     v1 = rand_ival()
     v2 = rand_ival()
 
-    # check that there are some gaps
+    n1 = smallest_numerator(v1)
+    n2 = smallest_numerator(v2)
+    n  = smallest_numerator(v1, v2)
 
-    # simplest fractions in each
-    f1 = simplest_frac(v1); d1 = f1.den
-    f2 = simplest_frac(v2); d2 = f2.den
+    max(n1, n2) < n < lcm(n1, n2) || continue
 
-    # smallest common denominator
-    d = smallest_denominator(v1, v2)
+    @show n1, n2, n
 
-    # skip easy cases
-    max(d1, d2) < d || continue
+    a1, b1, c1 = ival_abc(v1...)
+    a2, b2, c2 = ival_abc(v2...)
 
-    # find n1, n2 corresponding to common d
-    n1 = ceil(Int, d*v1[1])
-    n2 = ceil(Int, d*v2[1])
+    g, u, v = gcdx(b1, b2)
+    b1′ = b1 ÷ g
+    b2′ = b2 ÷ g
+    l = b1*b2′ # lcm(b1, b2)
 
-    # skip if numerator ratio is easy to find
-    r = n1//n2 # optimal ratio
-    isancestor(r, f1/f2) && continue
+    d1(n) = c1*n - mod(a1*n, b1)
+    d2(n) = c2*n - mod(a2*n, b2)
 
-    # find upper bound on solutions
-    r⁺ = f1/f2 # known solution
-    # PROBLEM: known solution doesn't always appear as solution
-    # according to the criterion below with d⁻ and d⁺
-    while true
-        # move up Stern-Brocot tree while feasible
-        r′ = up(r⁺)
-        d⁻ = max(ceil(Int, r′.num/v1[2]), ceil(Int, r′.den/v2[2]))
-        d⁺ = min(floor(Int, r′.num/v1[1]), floor(Int, r′.den/v2[1]))
-        d⁻ ≤ d⁺ || break
-        r⁺ = r′
-    end
-
-    # continue if siblings with optimal ratio
-    up(r) == up(r⁺) && continue
+    any(0:g-1) do n_g
+        n(i1,i2) = n_g + i1*b2 + i2*b1
+        d1(n(1,0)) < 0 || d1(n(0,1)) < 0 ||
+        d2(n(1,0)) < 0 || d2(n(0,1)) < 0
+    end || continue
 
     return v1, v2
-
-    vr = v1[1]/v2[2], v1[2]/v2[1]
-    r⁻ = simplest_frac(vr)
-    tr = cfrac_tree(r⁻)
 end
 
 mediant(x::Rational, y::Rational) = (x.num + y.num)//(x.den + y.den)
@@ -446,48 +432,36 @@ for _ = 1:10000
 end
 =#
 
-# least common linear combination, i.e. smallest positive n such that
-#
-#   n == a1*i1 + b1*j1 == a2*i2 + b2*j2
-#
-# for nonnegative i1, j1, i2, j2
-#
-function lclc(
+function ival_abc(x::Rational, y::Rational)
+    x.den*y.num,
+    x.num*y.num,
+    x.den*y.num - x.num*y.den
+end
+
+# compute m(S(a1,b1,c1) ∩ S(a2,b2,c2))
+function multiplicity(
     a1::Int, b1::Int, c1::Int,
     a2::Int, b2::Int, c2::Int,
 )
-    b1, a1 = minmax(b1, a1)
-    b2, a2 = minmax(b2, a2)
-    if a1*c2 < a2*c1
-        a1, a2 = a2, a1
-        b1, b2 = b2, b1
-        c1, c2 = c2, c1
-    end
+    g1 = gcd(a1, b1)
+    g2 = gcd(a2, b2)
 
-    # inverses we need
-    c1⁻¹ = invmod(c1, b1)
-    c2⁻¹ = invmod(c2, b2)
-    a2⁻¹ = invmod(a2, b2)
+    a1′ = a1 ÷ g1
+    b1′ = b1 ÷ g1
+    a2′ = a2 ÷ g2
+    b2′ = b2 ÷ g2
 
-    # gcd & lcm of b1, b2
-    g, u, v = gcdx(b1, b2)
-    b1′ = b1 ÷ g
-    b2′ = b2 ÷ g
-    l = b1*b2′ # lcm(b1, b2)
+    # gcd & lcm of b1′ & b2′
+    g, u, v = gcdx(b1′, b2′)
+    b1″ = b1′ ÷ g
+    b2″ = b2′ ÷ g
+    l = b1′*b2″ # lcm(b1′, b2′)
 
-    n = l # solution when i1 = i1 = 0
-    i1 = 0
-    while i1*a1 < n*c1
-        i2 = mod(i1*a1*c1⁻¹*a2⁻¹*c2, g)
-        i1 == i2 == 0 && (i2 += g)
-        while i2*a2 < n*c2
-            n′ = mod(i1*a1*c1⁻¹*v*b2′ + i2*a2*c2⁻¹*u*b1′, l)
-            if n′ < n && n′*c1 ≥ i1*a1 && n′*c2 ≥ i2*a2
-                n = n′
-            end
-            i2 += g
+    n = l # worst case
+    for n_g = 0:g-1 # n mod g
+        for i1 = 0:b1′-1, i2 = 0:b2′-1
+            n = n_g + i1*b2 + i2*b1
         end
-        i1 += 1
     end
 
     return n
