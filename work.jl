@@ -438,30 +438,48 @@ function ival_abc(x::Rational, y::Rational)
     x.den*y.num - x.num*y.den
 end
 
-# compute m(S(a1,b1,c1) ∩ S(a2,b2,c2))
-function multiplicity(
+# least common linear combination, i.e. smallest positive n such that
+#
+#   n == a1*i1 + b1*j1 == a2*i2 + b2*j2
+#
+# for nonnegative i1, j1, i2, j2
+#
+function lclc(
     a1::Int, b1::Int, c1::Int,
     a2::Int, b2::Int, c2::Int,
 )
-    g1 = gcd(a1, b1)
-    g2 = gcd(a2, b2)
+    b1, a1 = minmax(b1, a1)
+    b2, a2 = minmax(b2, a2)
+    if a1*c2 < a2*c1
+        a1, a2 = a2, a1
+        b1, b2 = b2, b1
+        c1, c2 = c2, c1
+    end
 
-    a1′ = a1 ÷ g1
-    b1′ = b1 ÷ g1
-    a2′ = a2 ÷ g2
-    b2′ = b2 ÷ g2
+    # inverses we need
+    c1⁻¹ = invmod(c1, b1)
+    c2⁻¹ = invmod(c2, b2)
+    a2⁻¹ = invmod(a2, b2)
 
-    # gcd & lcm of b1′ & b2′
-    g, u, v = gcdx(b1′, b2′)
-    b1″ = b1′ ÷ g
-    b2″ = b2′ ÷ g
-    l = b1′*b2″ # lcm(b1′, b2′)
+    # gcd & lcm of b1, b2
+    g, u, v = gcdx(b1, b2)
+    b1′ = b1 ÷ g
+    b2′ = b2 ÷ g
+    l = b1*b2′ # lcm(b1, b2)
 
-    n = l # worst case
-    for n_g = 0:g-1 # n mod g
-        for i1 = 0:b1′-1, i2 = 0:b2′-1
-            n = n_g + i1*b2 + i2*b1
+    n = l # solution when i1 = i1 = 0
+    i1 = 0
+    while i1*a1 < n*c1
+        i2 = mod(i1*a1*c1⁻¹*a2⁻¹*c2, g)
+        i1 == i2 == 0 && (i2 += g)
+        while i2*a2 < n*c2
+            n′ = mod(i1*a1*c1⁻¹*v*b2′ + i2*a2*c2⁻¹*u*b1′, l)
+            if n′ < n && n′*c1 ≥ i1*a1 && n′*c2 ≥ i2*a2
+                n = n′
+            end
+            i2 += g
         end
+        i1 += 1
     end
 
     return n
