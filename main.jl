@@ -219,18 +219,49 @@ function smallest_denominator(
     𝟘 = zero(lo)
     𝟙 = one(lo)
 
+    # return one if the interval contains integers
+    round(lo, RoundUp) ≤ round(hi, RoundDown) && return 𝟙
+
     # reduce to positive case
     if hi < 𝟘
         lo, hi = -hi, -lo
     end
     lo ≤ 𝟘 && return 𝟙
-    # if there are integers, return the simplest one
-    round(lo, RoundUp) ≤ round(hi, RoundDown) && return 𝟙
 
     # find strictly minimal solution
     n, d = simplest_rational_core(lo, hi)
 
     return d
+end
+
+function smallest_denominator(
+    (a⁻, a⁺) :: NTuple{2,TwicePrecision{T}},
+    (b⁻, b⁺) :: NTuple{2,TwicePrecision{T}},
+    (c⁻, c⁺) :: NTuple{2,TwicePrecision{T}},
+) where {T<:AbstractFloat}
+    a⁻, a⁺ = trunc_ival(a⁻, a⁺)
+    b⁻, b⁺ = trunc_ival(b⁻, b⁺)
+    c⁻, c⁺ = trunc_ival(c⁻, c⁺)
+    D = max(
+        smallest_denominator(a⁻, a⁺),
+        smallest_denominator(b⁻, b⁺),
+        smallest_denominator(c⁻, c⁺),
+    )
+    while true
+        A = round(D*a⁻, RoundUp)
+        B = round(D*b⁻, RoundUp)
+        C = round(D*c⁻, RoundUp)
+        A ≤ D*a⁺ &&
+        B ≤ D*b⁺ &&
+        C ≤ D*c⁺ && break
+        D = max(
+            round(A/a⁺, RoundUp),
+            round(B/b⁺, RoundUp),
+            round(C/c⁺, RoundUp),
+        )
+        @show D
+    end
+    D = T(D)
 end
 
 function ival(x::T) where {T<:AbstractFloat}
@@ -435,6 +466,7 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
         b = -b
         s = -s
     end
+    @show a, b, s
     # double precision intervals for a, b, s
     a⁻, a⁺ = ival(a)
     b⁻, b⁺ = ival(b)
@@ -454,28 +486,8 @@ function lift_range(a::T, s::T, b::T) where {T<:AbstractFloat}
         a⁻, a⁺ = ival(ldexp(a, -p))
         b⁻, b⁺ = ival(ldexp(b, -p))
     end
-    # find smallest common denominator
-    D = max(
-        smallest_denominator(a⁻, a⁺),
-        smallest_denominator(b⁻, b⁺),
-        smallest_denominator(s⁻, s⁺),
-    )
-    while true
-        A = round(D*a⁻, RoundUp)
-        B = round(D*b⁻, RoundUp)
-        S = round(D*s⁻, RoundUp)
-        A ≤ D*a⁺ &&
-        B ≤ D*b⁺ &&
-        S ≤ D*s⁺ && break
-        D = max(
-            round(A/a⁺, RoundUp),
-            round(B/b⁺, RoundUp),
-            round(S/s⁺, RoundUp),
-        )
-        @show D
-    end
-    D = T(D)
-    # find simplest numerator for each interval
+    # rationalize the three intervals
+    D = smallest_denominator((a⁻, a⁺), (b⁻, b⁺), (s⁻, s⁺))
     A = T(simplest_float(D*a⁻, D*a⁺)); @assert tz(A) ≥ 0
     B = T(simplest_float(D*b⁻, D*b⁺)); @assert tz(B) ≥ 0
     S = T(simplest_float(D*s⁻, D*s⁺)); @assert tz(S) ≥ 0
