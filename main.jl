@@ -234,14 +234,23 @@ function smallest_denominator(
     return d
 end
 
+function trunc_ival(
+    lo :: TwicePrecision{T},
+    hi :: TwicePrecision{T},
+) where {T<:AbstractFloat}
+    fl = floor(lo)
+    lo - fl, hi - fl
+end
+
 function smallest_denominator(
     (a⁻, a⁺) :: NTuple{2,TwicePrecision{T}},
     (b⁻, b⁺) :: NTuple{2,TwicePrecision{T}},
     (c⁻, c⁺) :: NTuple{2,TwicePrecision{T}},
 ) where {T<:AbstractFloat}
-    a⁻, a⁺ = trunc_ival(a⁻, a⁺)
-    b⁻, b⁺ = trunc_ival(b⁻, b⁺)
-    c⁻, c⁺ = trunc_ival(c⁻, c⁺)
+    @show (a⁻, a⁺) (b⁻, b⁺) (c⁻, c⁺)
+    # a⁻, a⁺ = trunc_ival(a⁻, a⁺)
+    # b⁻, b⁺ = trunc_ival(b⁻, b⁺)
+    # c⁻, c⁺ = trunc_ival(c⁻, c⁺)
     D = max(
         smallest_denominator(a⁻, a⁺),
         smallest_denominator(b⁻, b⁺),
@@ -251,15 +260,8 @@ function smallest_denominator(
         A = round(D*a⁻, RoundUp)
         B = round(D*b⁻, RoundUp)
         C = round(D*c⁻, RoundUp)
-        A ≤ D*a⁺ &&
-        B ≤ D*b⁺ &&
-        C ≤ D*c⁺ && break
-        D = max(
-            round(A/a⁺, RoundUp),
-            round(B/b⁺, RoundUp),
-            round(C/c⁺, RoundUp),
-        )
-        @show D
+        A ≤ D*a⁺ && B ≤ D*b⁺ && C ≤ D*c⁺ && break
+        D = max(cld(A, a⁺), cld(B, b⁺), cld(C, c⁺))
     end
     D = T(D)
 end

@@ -450,7 +450,7 @@ function lclc(
 )
     b1, a1 = minmax(b1, a1)
     b2, a2 = minmax(b2, a2)
-    if a1*c2 < a2*c1
+    if a1*c2 < a2*c1 # a1/c1 < a2/c2
         a1, a2 = a2, a1
         b1, b2 = b2, b1
         c1, c2 = c2, c1
@@ -467,7 +467,7 @@ function lclc(
     b2′ = b2 ÷ g
     l = b1*b2′ # lcm(b1, b2)
 
-    n = l # solution when i1 = i1 = 0
+    n = l # solution when i1 = i2 = 0
     i1 = 0
     while i1*a1 < n*c1
         i2 = mod(i1*a1*c1⁻¹*a2⁻¹*c2, g)
