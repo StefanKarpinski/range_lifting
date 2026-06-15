@@ -113,12 +113,24 @@ end
 tz(n::Integer) = trailing_zeros(n)
 tz(x::TwicePrecision) = iszero(x.lo) ? tz(x.hi) : tz(x.lo)
 
-# pick value in interval with the most trailing zeros
+# pick the value in the interval with the fewest significant bits, i.e. the
+# smallest span from leading to trailing set bit; ties broken toward smaller
+# magnitude. Within a single binade the leading bit is fixed, so this reduces
+# to "most trailing zeros". Across binades the interval contains a power of two
+# (one significant bit), and we take the smallest such — accounting for the
+# leading-bit ("max digit") term that most-trailing-zeros alone ignores.
 function simplest_float(lo::T, hi::T) where {T<:AbstractFloat}
     lo == hi && return lo
     hi < 0 && return -simplest_float(-hi, -lo)
     lo ≤ 0 && return zero(T)
     @assert 0 < lo < hi
+    # smallest power of two ≥ lo; if it's in range it's the fewest-significant-
+    # bits (= 1) value, and the smallest such, so it wins outright
+    p = ldexp(one(T), exponent(lo))     # largest power of two ≤ lo
+    p < lo && (p *= 2)                   # smallest power of two ≥ lo
+    p ≤ hi && return p
+    # otherwise [lo, hi] lies within one binade: fewest significant bits ⟺ most
+    # trailing zeros, and the max-tz value is unique
     e = exponent(hi - lo)
     b = floor(ldexp(hi, -e))
     a = max(lo, ldexp(b - 1, e))
